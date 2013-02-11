@@ -212,3 +212,52 @@ class Dict(Typed):
             factory = lambda: default.copy()
         super(Dict, self).__init__(dict, factory=factory)
 
+
+class Instance(Typed):
+    """ A typed member which allows the value to be set to None.
+
+    """
+    __slots__ = ()
+
+    def validate(self, owner, name, value):
+        if value is None:
+            return value
+        return super(Instance, self).validate(owner, name, value)
+
+
+class ReadOnly(Member):
+    """
+
+    """
+    __slots__ = ()
+
+    def __init__(self, default=None, factory=None):
+        super(ReadOnly, self).__init__(default, factory)
+        self.has_validate = True
+
+    def validate(self, owner, name, value):
+        raise ValueError("Can't set read-only member")
+
+
+class Enum(Member):
+    """
+
+    """
+    __slots__ = ()
+
+    def __init__(self, *allowed):
+        self.has_default = True
+        self.has_validate = True
+        if not allowed:
+            raise ValueError
+        self._default = allowed[0]
+        self._factory = set(allowed)
+
+    def default(self, owner, name):
+        return self._default
+
+    def validate(self, owner, name, value):
+        if value not in self._factory:
+            raise TypeError
+        return value
+
