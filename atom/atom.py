@@ -72,6 +72,22 @@ class Atom(CAtom):
         """
         return cls.__atom_members__
 
+    @classmethod
+    def create(cls, **kwargs):
+        """ Create an instance of this Atom class from keywords.
+
+        This method will create an empy instance of the class and then
+        populate it with the given keywords using the `update_members`
+        method.
+
+        This method only makes sense for those subclasses which do not
+        override the __init__ method with one which requires arguments.
+
+        """
+        self = cls()
+        self.update_members(**kwargs)
+        return self
+
     @contextlib.contextmanager
     def suppress_notifications(self, name=None, regex=False):
         """ Disable member notifications within in a context.

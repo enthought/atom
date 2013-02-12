@@ -77,12 +77,7 @@ enum MemberFlag
 static PyObject*
 PyNull_repr( PyNull* self )
 {
-    static PyObject* repr = 0;
-    if( !repr )
-        repr = PyString_FromString( "<null>" );
-    else
-        Py_INCREF( repr );
-    return repr;
+    return PyString_FromString( "<null>" );
 }
 
 
@@ -135,6 +130,33 @@ PyTypeObject PyNull_Type = {
     0,                                      /* tp_weaklist */
     (destructor)0                           /* tp_del */
 };
+
+
+static PyObject*
+MemberChange_new( PyTypeObject* type, PyObject* args, PyObject* kwargs )
+{
+    PyObject* object;
+    PyObject* name;
+    PyObject* oldvalue;
+    PyObject* newvalue;
+    static char* kwds[] = {"object", "name", "old", "new", 0};
+    if( !PyArg_ParseTupleAndKeywords(
+        args, kwargs, "OOOO", kwds, &object, &name, &oldvalue, &newvalue ) )
+        return 0;
+    PyObject* self = PyType_GenericNew( type, args, kwargs );
+    if( !self )
+        return 0;
+    Py_INCREF( object );
+    Py_INCREF( name );
+    Py_INCREF( oldvalue );
+    Py_INCREF( newvalue );
+    MemberChange* change = reinterpret_cast<MemberChange*>( self );
+    change->object = object;
+    change->name = name;
+    change->oldvalue = oldvalue;
+    change->newvalue = newvalue;
+    return self;
+}
 
 
 static void
@@ -302,7 +324,7 @@ PyTypeObject MemberChange_Type = {
     0,                                      /* tp_dictoffset */
     (initproc)0,                            /* tp_init */
     (allocfunc)PyType_GenericAlloc,         /* tp_alloc */
-    (newfunc)0,                             /* tp_new */
+    (newfunc)MemberChange_new,              /* tp_new */
     (freefunc)PyObject_GC_Del,              /* tp_free */
     (inquiry)0,                             /* tp_is_gc */
     0,                                      /* tp_bases */
@@ -316,6 +338,9 @@ PyTypeObject MemberChange_Type = {
 
 static int
 Member_Check( PyObject* member );
+
+static int
+Member__set__( PyObject* self, PyObject* owner, PyObject* value );
 
 
 inline bool
@@ -491,6 +516,32 @@ CAtom_disable_notifications( CAtom* self, PyObject* args )
 }
 
 
+static PyObject *
+CAtom_update_members( CAtom* self, PyObject* args, PyObject* kwargs )
+{
+    if( args && PyTuple_GET_SIZE( args ) )
+        return py_type_fail( "update_members() takes no positional args" );
+    if( !kwargs )
+        Py_RETURN_NONE;
+    Py_ssize_t pos = 0;
+    PyObject* key;
+    PyObject* value;
+    PyObjectPtr memberptr;
+    PyObject* pyself = reinterpret_cast<PyObject*>( self );
+    while( PyDict_Next( kwargs, &pos, &key, &value ) )
+    {
+        if( !PyString_Check( key ) )
+            return py_expected_type_fail( key, "str" );
+        PyObjectPtr memberptr( lookup_member( self, key ) );
+        if( !memberptr )
+            return 0;
+        if( Member__set__( memberptr.get(), pyself, value ) < 0 )
+            return 0;
+    }
+    Py_RETURN_NONE;
+}
+
+
 static PyObject*
 CAtom_notify( CAtom* self, PyObject* change )
 {
@@ -527,6 +578,9 @@ CAtom_methods[] = {
     { "disable_notifications",
       ( PyCFunction )CAtom_disable_notifications, METH_VARARGS,
       "Disable notifications for the atom." },
+    { "update_members", ( PyCFunction )CAtom_update_members,
+      METH_VARARGS | METH_KEYWORDS,
+      "Update the atom members with info from keyword values." },
     { "notify", ( PyCFunction )CAtom_notify, METH_O,
       "Called when a notifying member is changed. Reimplement as needed." },
     { "__sizeof__", ( PyCFunction )CAtom_sizeof, METH_NOARGS,

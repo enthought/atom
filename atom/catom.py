@@ -31,8 +31,6 @@ MEMBER_HAS_VALIDATE = 0x02
 
 
 #: A namedtuple which holds information about an atom member change.
-#: User code should not create instances of this type directly. The
-#: ability to do so is removed completely in the C++ extension.
 MemberChange = namedtuple('MemberChange', 'object name old new')
 
 
@@ -101,6 +99,18 @@ class CAtom(object):
         else:
             member = self.lookup_member(name)
             set_notify_bit(self, member._index + INDEX_OFFSET, False)
+
+    def update_members(self, **info):
+        """ Update the atom with information from keyword arguments.
+
+        Parameters
+        ----------
+        **info
+            The data to use for updating the members of the atom.
+
+        """
+        for key, value in info.iteritems():
+            setattr(self, key, value)
 
     def notify(self, change):
         """ Reimplement in a subclass to receive change notification.
