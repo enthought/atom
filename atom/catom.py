@@ -13,7 +13,11 @@ from collections import namedtuple
 
 
 #: A global sentinel representing C null
-null = object()
+class null(object):
+    __slots__ = ()
+    def __repr__(self):
+        return '<null>'
+null = null()
 
 
 #: Bit position constants
@@ -27,6 +31,8 @@ MEMBER_HAS_VALIDATE = 0x02
 
 
 #: A namedtuple which holds information about an atom member change.
+#: User code should not create instances of this type directly. The
+#: ability to do so is removed completely in the C++ extension.
 MemberChange = namedtuple('MemberChange', 'object name old new')
 
 
@@ -63,7 +69,7 @@ class CAtom(object):
         """
         ob_type = type(self)
         member = getattr(ob_type, name, None)
-        if not isinstance(member, CMember):
+        if not isinstance(member, Member):
             raise TypeError("object has no member '%s'" % member)
         return member
 
@@ -103,8 +109,8 @@ class CAtom(object):
         pass
 
 
-class CMember(object):
-    """ The base CMember class.
+class Member(object):
+    """ The base Member class.
 
     There is a much higher performance version of this class available
     as a C++ extension. Prefer building Atom with this extension.
@@ -164,10 +170,7 @@ class CMember(object):
         if value is not null:
             return value
         if self._flags & MEMBER_HAS_DEFAULT:
-            value = self.default(owner, self._name)
-        else:
-            value = None
-        data[index] = value
+            value = data[index] = self.default(owner, self._name)
         return value
 
     def __set__(self, owner, value):
@@ -185,16 +188,16 @@ class CMember(object):
             typename = type(owner).__name__
             attrname = self._name
             raise AttributeError(t % (typename, attrname))
-        if self._flags & MEMBER_HAS_VALIDATE:
-            value = self.validate(owner, self._name, value)
         old = data[index]
+        if old is value:
+            return
+        if self._flags & MEMBER_HAS_VALIDATE:
+            value = self.validate(owner, self._name, old, value)
         data[index] = value
         bit = index + INDEX_OFFSET
         if get_notify_bit(owner, ATOM_BIT) and get_notify_bit(owner, bit):
-            if old is null:
-                old = None
             try:
-                changed = old != value
+                changed = old is not value and old != value
             except Exception:
                 changed = True
             if changed:
@@ -205,29 +208,12 @@ class CMember(object):
         """ Delete the value of the member.
 
         """
-        if not isinstance(owner, CAtom):
-            t = "Expect object of type `CAtom`. "
-            t += "Got object of type `%s` instead."
-            raise TypeError(t % type(owner).__name__)
-        index = self._index
-        data = owner._c_atom_data
-        if index >= len(data):
-            t = "'%s' object has no attribute '%s'"
-            typename = type(owner).__name__
-            attrname = self._name
-            raise AttributeError(t % (typename, attrname))
-        old = data[index]
-        data[index] = null
-        bit = index + INDEX_OFFSET
-        if get_notify_bit(owner, ATOM_BIT) and get_notify_bit(owner, bit):
-            if old is not null:
-                change = MemberChange(owner, self._name, old, None)
-                owner.notify(change)
+        self.__set__(owner, null)
 
 
 #: Use the faster C++ versions if available
 try:
-    from .extensions.catom import CAtom, CMember, MemberChange
+    from .extensions.catom import CAtom, Member, MemberChange, null
 except ImportError:
     pass
 

@@ -38,6 +38,13 @@ as a whole.
 */
 typedef struct {
     PyObject_HEAD
+} PyNull;
+
+static PyObject* _py_null;
+
+
+typedef struct {
+    PyObject_HEAD
     Py_ssize_t count;
     PyObject** data;
 } CAtom;
@@ -48,7 +55,7 @@ typedef struct {
     size_t flags;
     Py_ssize_t index;
     PyObject* name;
-} CMember;
+} Member;
 
 
 typedef struct {
@@ -60,10 +67,73 @@ typedef struct {
 } MemberChange;
 
 
-enum CMemberFlag
+enum MemberFlag
 {
     MemberHasDefault = 0x1,
     MemberHasValidate = 0x2
+};
+
+
+static PyObject*
+PyNull_repr( PyNull* self )
+{
+    static PyObject* repr = 0;
+    if( !repr )
+        repr = PyString_FromString( "<null>" );
+    else
+        Py_INCREF( repr );
+    return repr;
+}
+
+
+PyTypeObject PyNull_Type = {
+    PyObject_HEAD_INIT( &PyType_Type )
+    0,                                      /* ob_size */
+    "catom.null",                           /* tp_name */
+    sizeof( PyNull ),                       /* tp_basicsize */
+    0,                                      /* tp_itemsize */
+    (destructor)0,                          /* tp_dealloc */
+    (printfunc)0,                           /* tp_print */
+    (getattrfunc)0,                         /* tp_getattr */
+    (setattrfunc)0,                         /* tp_setattr */
+    (cmpfunc)0,                             /* tp_compare */
+    (reprfunc)PyNull_repr,                  /* tp_repr */
+    (PyNumberMethods*)0,                    /* tp_as_number */
+    (PySequenceMethods*)0,                  /* tp_as_sequence */
+    (PyMappingMethods*)0,                   /* tp_as_mapping */
+    (hashfunc)0,                            /* tp_hash */
+    (ternaryfunc)0,                         /* tp_call */
+    (reprfunc)0,                            /* tp_str */
+    (getattrofunc)0,                        /* tp_getattro */
+    (setattrofunc)0,                        /* tp_setattro */
+    (PyBufferProcs*)0,                      /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT,                     /* tp_flags */
+    0,                                      /* Documentation string */
+    (traverseproc)0,                        /* tp_traverse */
+    (inquiry)0,                             /* tp_clear */
+    (richcmpfunc)0,                         /* tp_richcompare */
+    0,                                      /* tp_weaklistoffset */
+    (getiterfunc)0,                         /* tp_iter */
+    (iternextfunc)0,                        /* tp_iternext */
+    (struct PyMethodDef*)0,                 /* tp_methods */
+    (struct PyMemberDef*)0,                 /* tp_members */
+    0,                                      /* tp_getset */
+    0,                                      /* tp_base */
+    0,                                      /* tp_dict */
+    (descrgetfunc)0,                        /* tp_descr_get */
+    (descrsetfunc)0,                        /* tp_descr_set */
+    0,                                      /* tp_dictoffset */
+    (initproc)0,                            /* tp_init */
+    (allocfunc)PyType_GenericAlloc,         /* tp_alloc */
+    (newfunc)0,                             /* tp_new */
+    (freefunc)PyObject_Del,                 /* tp_free */
+    (inquiry)0,                             /* tp_is_gc */
+    0,                                      /* tp_bases */
+    0,                                      /* tp_mro */
+    0,                                      /* tp_cache */
+    0,                                      /* tp_subclasses */
+    0,                                      /* tp_weaklist */
+    (destructor)0                           /* tp_del */
 };
 
 
@@ -158,28 +228,28 @@ MemberChange_repr( MemberChange* self )
     if( self->object )
          objectstr = PyObject_Repr( self->object );
     else
-         objectstr = PyObject_Repr( Py_None );
+         objectstr = PyObject_Repr( _py_null );
     if( !objectstr )
         return 0;
     PyObjectPtr namestr;
     if( self->name )
         namestr = PyObject_Repr( self->name );
     else
-        namestr = PyObject_Repr( Py_None );
+        namestr = PyObject_Repr( _py_null );
     if( !namestr )
         return 0;
     PyObjectPtr oldstr;
     if( self->oldvalue )
         oldstr = PyObject_Repr( self->oldvalue );
     else
-        oldstr = PyObject_Repr( Py_None );
+        oldstr = PyObject_Repr( _py_null );
     if( !oldstr )
         return 0;
     PyObjectPtr newstr;
     if( self->newvalue )
         newstr = PyObject_Repr( self->newvalue );
     else
-        newstr = PyObject_Repr( Py_None );
+        newstr = PyObject_Repr( _py_null );
     if( !newstr )
         return 0;
     PyObject* res = PyString_FromFormat(
@@ -232,7 +302,7 @@ PyTypeObject MemberChange_Type = {
     0,                                      /* tp_dictoffset */
     (initproc)0,                            /* tp_init */
     (allocfunc)PyType_GenericAlloc,         /* tp_alloc */
-    (newfunc)PyType_GenericNew,             /* tp_new */
+    (newfunc)0,                             /* tp_new */
     (freefunc)PyObject_GC_Del,              /* tp_free */
     (inquiry)0,                             /* tp_is_gc */
     0,                                      /* tp_bases */
@@ -245,7 +315,7 @@ PyTypeObject MemberChange_Type = {
 
 
 static int
-CMember_Check( PyObject* member );
+Member_Check( PyObject* member );
 
 
 inline bool
@@ -347,8 +417,8 @@ lookup_member( CAtom* self, PyObject* name )
     );
     if( !member )
         return 0;
-    if( !CMember_Check( member.get() ) )
-        return py_expected_type_fail( member.get(), "CMember" );
+    if( !Member_Check( member.get() ) )
+        return py_expected_type_fail( member.get(), "Member" );
     return member.release();
 }
 
@@ -373,11 +443,11 @@ CAtom_notifications_enabled( CAtom* self, PyObject* args )
     size_t notifybit = ATOM_BIT;
     if( name )
     {
-        PyObjectPtr member( lookup_member( self, name ) );
-        if( !member )
+        PyObjectPtr memberptr( lookup_member( self, name ) );
+        if( !memberptr )
             return 0;
-        CMember* cmember = reinterpret_cast<CMember*>( member.get() );
-        notifybit = cmember->index + INDEX_OFFSET;
+        Member* member = reinterpret_cast<Member*>( memberptr.get() );
+        notifybit = member->index + INDEX_OFFSET;
     }
     if( get_notify_bit( self, notifybit ) )
         Py_RETURN_TRUE;
@@ -396,11 +466,11 @@ toggle_notifications( CAtom* self, PyObject* args, bool enable )
     size_t notifybit = ATOM_BIT;
     if( name )
     {
-        PyObjectPtr member( lookup_member( self, name ) );
-        if( !member )
+        PyObjectPtr memberptr( lookup_member( self, name ) );
+        if( !memberptr )
             return 0;
-        CMember* cmember = reinterpret_cast<CMember*>( member.get() );
-        notifybit = cmember->index + INDEX_OFFSET;
+        Member* member = reinterpret_cast<Member*>( memberptr.get() );
+        notifybit = member->index + INDEX_OFFSET;
     }
     set_notify_bit( self, notifybit, enable );
     Py_RETURN_TRUE;
@@ -517,12 +587,12 @@ PyTypeObject CAtom_Type = {
 
 
 static PyObject*
-CMember_new( PyTypeObject* type, PyObject* args, PyObject* kwargs )
+Member_new( PyTypeObject* type, PyObject* args, PyObject* kwargs )
 {
     PyObjectPtr self_ptr( PyType_GenericNew( type, args, kwargs ) );
     if( !self_ptr )
         return 0;
-    CMember* member = reinterpret_cast<CMember*>( self_ptr.get() );
+    Member* member = reinterpret_cast<Member*>( self_ptr.get() );
     member->name = _undefined;
     Py_INCREF( member->name );
     return self_ptr.release();
@@ -530,7 +600,7 @@ CMember_new( PyTypeObject* type, PyObject* args, PyObject* kwargs )
 
 
 static void
-CMember_dealloc( CMember* self )
+Member_dealloc( Member* self )
 {
     Py_DECREF( self->name );
     self->ob_type->tp_free( reinterpret_cast<PyObject*>( self ) );
@@ -538,7 +608,7 @@ CMember_dealloc( CMember* self )
 
 
 static PyObject*
-CMember__get__( PyObject* self, PyObject* owner, PyObject* type )
+Member__get__( PyObject* self, PyObject* owner, PyObject* type )
 {
     if( !owner )
     {
@@ -548,7 +618,7 @@ CMember__get__( PyObject* self, PyObject* owner, PyObject* type )
     if( !PyObject_TypeCheck( owner, &CAtom_Type ) )
         return py_expected_type_fail( owner, "CAtom" );
     CAtom* atom = reinterpret_cast<CAtom*>( owner );
-    CMember* member = reinterpret_cast<CMember*>( self );
+    Member* member = reinterpret_cast<Member*>( self );
     if( member->index >= atom->count )
         return py_no_attr_fail( owner, PyString_AsString( member->name ) );
     PyObjectPtr value( atom->data[ member->index ], true );
@@ -559,16 +629,17 @@ CMember__get__( PyObject* self, PyObject* owner, PyObject* type )
         value = PyObject_CallMethodObjArgs( self, _default, owner, member->name, 0 );
         if( !value )
             return 0;
+        if( value.get() != _py_null )
+            atom->data[ member->index ] = value.newref();
     }
     else
-        value.set( Py_None, true );
-    atom->data[ member->index ] = value.newref();
+        value.set( _py_null, true );
     return value.release();
 }
 
 
 static int
-CMember__set__( PyObject* self, PyObject* owner, PyObject* value )
+Member__set__( PyObject* self, PyObject* owner, PyObject* value )
 {
     if( !PyObject_TypeCheck( owner, &CAtom_Type ) )
     {
@@ -576,30 +647,44 @@ CMember__set__( PyObject* self, PyObject* owner, PyObject* value )
         return -1;
     }
     CAtom* atom = reinterpret_cast<CAtom*>( owner );
-    CMember* member = reinterpret_cast<CMember*>( self );
+    Member* member = reinterpret_cast<Member*>( self );
     if( member->index >= atom->count )
     {
         py_no_attr_fail( owner, PyString_AsString( member->name ) );
         return -1;
     }
+    // Take over ownership of the old value and decref on destructor
+    PyObjectPtr oldptr( atom->data[ member->index ] );
     PyObjectPtr newptr( value, true );
-    if( newptr && member->flags & MemberHasValidate )
+    if( newptr.get() == _py_null )
+        newptr.release( true );
+    if( oldptr == newptr )
     {
+        oldptr.release();
+        return 0;
+    }
+    if( member->flags & MemberHasValidate )
+    {
+        if( !oldptr )
+            oldptr.set( _py_null, true );
+        if( !newptr )
+            newptr.set( _py_null, true );
         newptr = PyObject_CallMethodObjArgs(
-            self, _validate, owner, member->name, value, 0
+            self, _validate, owner, member->name, oldptr.get(), newptr.get(), 0
         );
         if( !newptr )
             return -1;
+        if( newptr.get() == _py_null )
+            newptr.release( true );
     }
-    PyObjectPtr oldptr( atom->data[ member->index ] );
     atom->data[ member->index ] = newptr.newref();
     size_t member_bit = member->index + INDEX_OFFSET;
     if( get_notify_bit( atom, ATOM_BIT ) && get_notify_bit( atom, member_bit ) )
     {
         if( !oldptr )
-            oldptr.set( Py_None, true );
+            oldptr.set( _py_null, true );
         if( !newptr )
-            newptr.set( Py_None, true );
+            newptr.set( _py_null, true );
         if( oldptr != newptr && !oldptr.richcompare( newptr, Py_EQ ) )
         {
             PyObjectPtr changeptr( PyType_GenericNew( &MemberChange_Type, 0, 0 ) );
@@ -624,7 +709,7 @@ CMember__set__( PyObject* self, PyObject* owner, PyObject* value )
 
 
 static PyObject*
-CMember_get_name( CMember* self, void* context )
+Member_get_name( Member* self, void* context )
 {
     Py_INCREF( self->name );
     return self->name;
@@ -632,7 +717,7 @@ CMember_get_name( CMember* self, void* context )
 
 
 static int
-CMember_set_name( CMember* self, PyObject* value, void* context )
+Member_set_name( Member* self, PyObject* value, void* context )
 {
     if( !value )
         value = _undefined;
@@ -650,14 +735,14 @@ CMember_set_name( CMember* self, PyObject* value, void* context )
 
 
 static PyObject*
-CMember_get_index( CMember* self, void* context )
+Member_get_index( Member* self, void* context )
 {
     return PyInt_FromSsize_t( self->index );
 }
 
 
 static int
-CMember_set_index( CMember* self, PyObject* value, void* context )
+Member_set_index( Member* self, PyObject* value, void* context )
 {
     if( !value )
     {
@@ -678,7 +763,7 @@ CMember_set_index( CMember* self, PyObject* value, void* context )
 
 
 static int
-toggle_member_flag( CMember* self, PyObject* value, CMemberFlag flag )
+toggle_member_flag( Member* self, PyObject* value, MemberFlag flag )
 {
     if( !value )
         value = Py_False;
@@ -696,7 +781,7 @@ toggle_member_flag( CMember* self, PyObject* value, CMemberFlag flag )
 
 
 static PyObject*
-CMember_get_has_default( CMember* self, void* context )
+Member_get_has_default( Member* self, void* context )
 {
     if( self->flags & MemberHasDefault )
         Py_RETURN_TRUE;
@@ -705,14 +790,14 @@ CMember_get_has_default( CMember* self, void* context )
 
 
 static int
-CMember_set_has_default( CMember* self, PyObject* value, void* context )
+Member_set_has_default( Member* self, PyObject* value, void* context )
 {
     return toggle_member_flag( self, value, MemberHasDefault );
 }
 
 
 static PyObject*
-CMember_get_has_validate( CMember* self, void* context )
+Member_get_has_validate( Member* self, void* context )
 {
     if( self->flags & MemberHasValidate )
         Py_RETURN_TRUE;
@@ -721,37 +806,37 @@ CMember_get_has_validate( CMember* self, void* context )
 
 
 static int
-CMember_set_has_validate( CMember* self, PyObject* value, void* context )
+Member_set_has_validate( Member* self, PyObject* value, void* context )
 {
     return toggle_member_flag( self, value, MemberHasValidate );
 }
 
 
 static PyGetSetDef
-CMember_getset[] = {
+Member_getset[] = {
     { "_name",
-      ( getter )CMember_get_name, ( setter )CMember_set_name,
+      ( getter )Member_get_name, ( setter )Member_set_name,
       "Get and set the name to which the member is bound. Use with extreme caution!" },
     { "_index",
-      ( getter )CMember_get_index, ( setter )CMember_set_index,
+      ( getter )Member_get_index, ( setter )Member_set_index,
       "Get and set the index to which the member is bound. Use with extreme caution!" },
     { "has_default",
-      ( getter )CMember_get_has_default, ( setter )CMember_set_has_default,
+      ( getter )Member_get_has_default, ( setter )Member_set_has_default,
       "Get and set whether the member has a default function or method." },
     { "has_validate",
-      ( getter )CMember_get_has_validate, ( setter )CMember_set_has_validate,
+      ( getter )Member_get_has_validate, ( setter )Member_set_has_validate,
       "Get and set whether the member has a validate function or method." },
     { 0 } // sentinel
 };
 
 
-PyTypeObject CMember_Type = {
+PyTypeObject Member_Type = {
     PyObject_HEAD_INIT( &PyType_Type )
     0,                                      /* ob_size */
-    "catom.CMember",                        /* tp_name */
-    sizeof( CMember ),                      /* tp_basicsize */
+    "catom.Member",                        /* tp_name */
+    sizeof( Member ),                      /* tp_basicsize */
     0,                                      /* tp_itemsize */
-    (destructor)CMember_dealloc,            /* tp_dealloc */
+    (destructor)Member_dealloc,            /* tp_dealloc */
     (printfunc)0,                           /* tp_print */
     (getattrfunc)0,                         /* tp_getattr */
     (setattrfunc)0,                         /* tp_setattr */
@@ -776,15 +861,15 @@ PyTypeObject CMember_Type = {
     (iternextfunc)0,                        /* tp_iternext */
     (struct PyMethodDef*)0,                 /* tp_methods */
     (struct PyMemberDef*)0,                 /* tp_members */
-    CMember_getset,                         /* tp_getset */
+    Member_getset,                         /* tp_getset */
     0,                                      /* tp_base */
     0,                                      /* tp_dict */
-    (descrgetfunc)CMember__get__,           /* tp_descr_get */
-    (descrsetfunc)CMember__set__,           /* tp_descr_set */
+    (descrgetfunc)Member__get__,           /* tp_descr_get */
+    (descrsetfunc)Member__set__,           /* tp_descr_set */
     0,                                      /* tp_dictoffset */
     (initproc)0,                            /* tp_init */
     (allocfunc)PyType_GenericAlloc,         /* tp_alloc */
-    (newfunc)CMember_new,                   /* tp_new */
+    (newfunc)Member_new,                   /* tp_new */
     (freefunc)PyObject_Del,                 /* tp_free */
     (inquiry)0,                             /* tp_is_gc */
     0,                                      /* tp_bases */
@@ -797,9 +882,9 @@ PyTypeObject CMember_Type = {
 
 
 static int
-CMember_Check( PyObject* member )
+Member_Check( PyObject* member )
 {
-    return PyObject_TypeCheck( member, &CMember_Type );
+    return PyObject_TypeCheck( member, &Member_Type );
 }
 
 
@@ -834,14 +919,21 @@ initcatom( void )
         return;
     if( PyType_Ready( &CAtom_Type ) )
         return;
-    if( PyType_Ready( &CMember_Type ) )
+    if( PyType_Ready( &Member_Type ) )
+        return;
+    if( PyType_Ready( &PyNull_Type ) )
+        return;
+    _py_null = PyType_GenericNew( &PyNull_Type, 0, 0 );
+    if( !_py_null )
         return;
     Py_INCREF( &MemberChange_Type );
     Py_INCREF( &CAtom_Type );
-    Py_INCREF( &CMember_Type );
+    Py_INCREF( &Member_Type );
+    Py_INCREF( _py_null );
     PyModule_AddObject( mod, "MemberChange", reinterpret_cast<PyObject*>( &MemberChange_Type ) );
     PyModule_AddObject( mod, "CAtom", reinterpret_cast<PyObject*>( &CAtom_Type ) );
-    PyModule_AddObject( mod, "CMember", reinterpret_cast<PyObject*>( &CMember_Type ) );
+    PyModule_AddObject( mod, "Member", reinterpret_cast<PyObject*>( &Member_Type ) );
+    PyModule_AddObject( mod, "null", _py_null );
 }
 
 
