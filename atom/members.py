@@ -44,6 +44,32 @@ class Value(Member):
         return self._default
 
 
+class OwnerValue(Member):
+    """ A member which will call a factory for the default value.
+
+    """
+    __slots__ = ('_factory',)
+
+    def __init__(self, factory):
+        """ Initialize an OwnerValueFactory.
+
+        Parameters
+        ----------
+        factory : callable
+            A callable which accepts a single argument, the member
+            owner, and returns the default value.
+
+        """
+        self.has_default = True
+        self._factory = factory
+
+    def default(self, owner, name):
+        """ Get the default value for the member.
+
+        """
+        return self._factory(owner)
+
+
 class ReadOnly(Value):
     """ A value which can be assigned once and is then read-only.
 

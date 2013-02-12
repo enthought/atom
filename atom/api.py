@@ -5,9 +5,9 @@
 from .atom import AtomMeta, Atom
 from .catom import CAtom, Member, MemberChange, null
 from .members import (
-    Value, Typed, Bool, Int, Long, Float, Str, Unicode, Tuple, List, Dict,
-    Instance, ReadOnly, Enum
+    Value, OwnerValue, ReadOnly, Constant, Typed, Bool, Int, Long, Float, Str,
+    Unicode, Tuple, List, Dict, Instance, Enum
 )
-from .observable import Observable
+from .observable import Observable, Event
 from .observerpool import ObserverPool
 
