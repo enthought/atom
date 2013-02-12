@@ -5,7 +5,7 @@
 import contextlib
 import re
 
-from .catom import CAtom, CMember
+from .catom import CAtom, Member
 
 
 class AtomMeta(type):
@@ -31,7 +31,7 @@ class AtomMeta(type):
                 members.update(base.__atom_members__)
         count = len(members)
         for key, value in dct.iteritems():
-            if isinstance(value, CMember):
+            if isinstance(value, Member):
                 value._name = key
                 if key in members:
                     value._index = members[key]._index
