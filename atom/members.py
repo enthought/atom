@@ -2,21 +2,20 @@
 #  Copyright (c) 2013, Enthought, Inc.
 #  All rights reserved.
 #------------------------------------------------------------------------------
-from .catom import CMember
+from .catom import Member, null
 
 
-class Member(CMember):
-    """ A simple class for defining data members of an atom.
+class Value(Member):
+    """ A simple member class which supports value initialization.
 
-    A plain `Member` provides support for default values and factories,
-    but does not perform any type checking or validation. It is useful
-    for creating private storage attributes on an atom.
+    A plain `Value` provides support for default values and factories,
+    but does not perform any type checking or validation.
 
     """
     __slots__ = ('_default', '_factory')
 
     def __init__(self, default=None, factory=None):
-        """ Initialize a Member.
+        """ Initialize a Value.
 
         Parameters
         ----------
@@ -45,7 +44,37 @@ class Member(CMember):
         return self._default
 
 
-class Typed(Member):
+class ReadOnly(Value):
+    """ A value which can be assigned once and is then read-only.
+
+    """
+    __slots__ = ()
+
+    def __init__(self, default=None, factory=None):
+        super(ReadOnly, self).__init__(default, factory)
+        self.has_validate = True
+
+    def validate(self, owner, name, old, new):
+        if old is not null:
+            raise RuntimeError("Cannot change a read-only value")
+        return new
+
+
+class Constant(Value):
+    """ A value which cannot be changed from its default.
+
+    """
+    __slots__ = ()
+
+    def __init__(self, default=None, factory=None):
+        super(ReadOnly, self).__init__(default, factory)
+        self.has_validate = True
+
+    def validate(self, owner, name, old, new):
+        raise RuntimeError("Cannot change a constant value")
+
+
+class Typed(Value):
     """ A member class wich supports type validation.
 
     """
@@ -72,7 +101,7 @@ class Typed(Member):
         self.has_validate = True
         self._kind = kind
 
-    def validate(self, owner, name, value):
+    def validate(self, owner, name, old, new):
         """ Validate the value being assigned to the member.
 
         If the value is not valid, a TypeError is raised.
@@ -85,7 +114,10 @@ class Typed(Member):
         name : str
             The member name of the atom being modified.
 
-        value : object
+        old : object
+            The old value of the member.
+
+        new : object
             The value being assigned to the member.
 
         Returns
@@ -94,14 +126,14 @@ class Typed(Member):
             The original value, provided it passes type validation.
 
         """
-        if not isinstance(value, self._kind):
+        if not isinstance(new, self._kind):
             t = "The '%s' member on the `%s` object requires a value of type "
             t += "`%s`. Got value of type `%s` instead."
             owner_type = type(owner).__name__
             kind_type = self._kind.__name__
-            value_type = type(value).__name__
+            value_type = type(new).__name__
             raise TypeError(t % (name, owner_type, kind_type, value_type))
-        return value
+        return new
 
 
 class Bool(Typed):
@@ -219,45 +251,62 @@ class Instance(Typed):
     """
     __slots__ = ()
 
-    def validate(self, owner, name, value):
-        if value is None:
-            return value
-        return super(Instance, self).validate(owner, name, value)
-
-
-class ReadOnly(Member):
-    """
-
-    """
-    __slots__ = ()
-
-    def __init__(self, default=None, factory=None):
-        super(ReadOnly, self).__init__(default, factory)
-        self.has_validate = True
-
-    def validate(self, owner, name, value):
-        raise ValueError("Can't set read-only member")
+    def validate(self, owner, name, old, new):
+        if new is None:
+            return new
+        return super(Instance, self).validate(owner, name, old, new)
 
 
 class Enum(Member):
-    """
+    """ A member where the value can be one of a provided set.
 
     """
-    __slots__ = ()
+    __slots__ = ('_default', '_items')
 
-    def __init__(self, *allowed):
+    def __init__(self, *items, **kwargs):
+        """ Initialize an Enum.
+
+        *items
+            The allowable items for the enum. There must be at least
+            one and they must all be hashable. These items are shared
+            amongst all Atom instances for class on which the Enum is
+            defined, so mutable enum items should be avoided.
+
+        **kwargs
+            Additional keyword arguments for the enum:
+
+                default : object
+                    The default value to use for the enum. If this is
+                    not given, the first of the given items is used.
+
+        """
+        if len(items) == 0:
+            raise ValueError('an Enum requires at least 1 item')
         self.has_default = True
         self.has_validate = True
-        if not allowed:
-            raise ValueError
-        self._default = allowed[0]
-        self._factory = set(allowed)
+        self._items = set(items)
+        if 'default' in kwargs:
+            default = kwargs['default']
+            if default not in self._items:
+                t = 'default `%s` is not a valid enum item'
+                raise ValueError(t % default)
+        else:
+            default = items[0]
+        self._default = default
 
     def default(self, owner, name):
+        """ Get the default value for the enum.
+
+        """
         return self._default
 
-    def validate(self, owner, name, value):
-        if value not in self._factory:
-            raise TypeError
-        return value
+    def validate(self, owner, name, old, new):
+        """ Validate the enum value.
+
+        """
+        if new is null:
+            return new
+        if new not in self._items:
+            raise ValueError('`%s` is not a valid enum item' % new)
+        return new
 
