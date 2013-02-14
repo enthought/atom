@@ -146,15 +146,11 @@ MemberChange_new( PyTypeObject* type, PyObject* args, PyObject* kwargs )
     PyObject* self = PyType_GenericNew( type, args, kwargs );
     if( !self )
         return 0;
-    Py_INCREF( object );
-    Py_INCREF( name );
-    Py_INCREF( oldvalue );
-    Py_INCREF( newvalue );
     MemberChange* change = reinterpret_cast<MemberChange*>( self );
-    change->object = object;
-    change->name = name;
-    change->oldvalue = oldvalue;
-    change->newvalue = newvalue;
+    change->object = newref( object );
+    change->name = newref( name );
+    change->oldvalue = newref( oldvalue );
+    change->newvalue = newref( newvalue );
     return self;
 }
 
@@ -194,8 +190,7 @@ MemberChange_get_object( MemberChange* self, void* context )
 {
     if( !self->object )
         Py_RETURN_NONE;
-    Py_INCREF( self->object );
-    return self->object;
+    return newref( self->object );
 }
 
 
@@ -204,8 +199,7 @@ MemberChange_get_name( MemberChange* self, void* context )
 {
     if( !self->name )
         Py_RETURN_NONE;
-    Py_INCREF( self->name );
-    return self->name;
+    return newref( self->name );
 }
 
 
@@ -214,8 +208,7 @@ MemberChange_get_oldvalue( MemberChange* self, void* context )
 {
     if( !self->oldvalue )
         Py_RETURN_NONE;
-    Py_INCREF( self->oldvalue );
-    return self->oldvalue;
+    return newref( self->oldvalue );
 }
 
 
@@ -224,8 +217,7 @@ MemberChange_get_newvalue( MemberChange* self, void* context )
 {
     if( !self->newvalue )
         Py_RETURN_NONE;
-    Py_INCREF( self->newvalue );
-    return self->newvalue;
+    return newref( self->newvalue );
 }
 
 
@@ -370,17 +362,17 @@ set_notify_bit( CAtom* atom, size_t bit, bool set )
 static PyObject*
 CAtom_new( PyTypeObject* type, PyObject* args, PyObject* kwargs )
 {
-    PyDictPtr members_ptr(
+    PyDictPtr membersptr(
         PyObject_GetAttr( reinterpret_cast<PyObject*>( type ), _atom_members )
     );
-    if( !members_ptr )
+    if( !membersptr )
         return 0;
-    if( !members_ptr.check_exact() )
-        return py_expected_type_fail( members_ptr.get(), "dict" );
-    PyObjectPtr self_ptr( PyType_GenericNew( type, args, kwargs ) );
-    if( !self_ptr )
+    if( !membersptr.check_exact() )
+        return py_expected_type_fail( membersptr.get(), "dict" );
+    PyObjectPtr selfptr( PyType_GenericNew( type, args, kwargs ) );
+    if( !selfptr )
         return 0;
-    Py_ssize_t count = members_ptr.size();
+    Py_ssize_t count = membersptr.size();
     if( count > 0 )
     {
         // count + 1 accounts for the atom bit.
@@ -392,11 +384,11 @@ CAtom_new( PyTypeObject* type, PyObject* args, PyObject* kwargs )
         if( !data )
             return PyErr_NoMemory();
         memset( data, 0, sizeof( PyObject* ) * ( count + blocks ) );
-        CAtom* atom = reinterpret_cast<CAtom*>( self_ptr.get() );
+        CAtom* atom = reinterpret_cast<CAtom*>( selfptr.get() );
         atom->data = reinterpret_cast<PyObject**>( data );
         atom->count = count;
     }
-    return self_ptr.release();
+    return selfptr.release();
 }
 
 
@@ -532,7 +524,7 @@ CAtom_update_members( CAtom* self, PyObject* args, PyObject* kwargs )
     {
         if( !PyString_Check( key ) )
             return py_expected_type_fail( key, "str" );
-        PyObjectPtr memberptr( lookup_member( self, key ) );
+        memberptr = lookup_member( self, key );
         if( !memberptr )
             return 0;
         if( Member__set__( memberptr.get(), pyself, value ) < 0 )
@@ -643,13 +635,12 @@ PyTypeObject CAtom_Type = {
 static PyObject*
 Member_new( PyTypeObject* type, PyObject* args, PyObject* kwargs )
 {
-    PyObjectPtr self_ptr( PyType_GenericNew( type, args, kwargs ) );
-    if( !self_ptr )
+    PyObjectPtr selfptr( PyType_GenericNew( type, args, kwargs ) );
+    if( !selfptr )
         return 0;
-    Member* member = reinterpret_cast<Member*>( self_ptr.get() );
-    member->name = _undefined;
-    Py_INCREF( member->name );
-    return self_ptr.release();
+    Member* member = reinterpret_cast<Member*>( selfptr.get() );
+    member->name = newref( _undefined );
+    return selfptr.release();
 }
 
 
@@ -665,30 +656,35 @@ static PyObject*
 Member__get__( PyObject* self, PyObject* owner, PyObject* type )
 {
     if( !owner )
-    {
-        Py_INCREF( self );
-        return self;
-    }
+        return newref( self );
     if( !PyObject_TypeCheck( owner, &CAtom_Type ) )
         return py_expected_type_fail( owner, "CAtom" );
     CAtom* atom = reinterpret_cast<CAtom*>( owner );
     Member* member = reinterpret_cast<Member*>( self );
     if( member->index >= atom->count )
         return py_no_attr_fail( owner, PyString_AsString( member->name ) );
-    PyObjectPtr value( atom->data[ member->index ], true );
+    PyObjectPtr value( atom->data[ member->index ] );
     if( value )
-        return value.release();
+        return value.incref_release();
     if( member->flags & MemberHasDefault )
     {
-        value = PyObject_CallMethodObjArgs( self, _default, owner, member->name, 0 );
+        PyObjectPtr selfptr( newref( self ) );
+        PyObjectPtr callable( selfptr.get_attr( _default ) );
+        if( !callable )
+            return 0;
+        PyTuplePtr args( 2 );
+        if( !args )
+            return 0;
+        args.initialize( 0, newref( owner ) );
+        args.initialize( 1, newref( member->name ) );
+        value = callable( args );
         if( !value )
             return 0;
-        if( value.get() != _py_null )
+        if( value != _py_null )
             atom->data[ member->index ] = value.newref();
+        return value.release();
     }
-    else
-        value.set( _py_null, true );
-    return value.release();
+    return newref( _py_null );
 }
 
 
@@ -707,53 +703,69 @@ Member__set__( PyObject* self, PyObject* owner, PyObject* value )
         py_no_attr_fail( owner, PyString_AsString( member->name ) );
         return -1;
     }
-    // Take over ownership of the old value and decref on destructor
     PyObjectPtr oldptr( atom->data[ member->index ] );
-    PyObjectPtr newptr( value, true );
-    if( newptr.get() == _py_null )
-        newptr.release( true );
+    PyObjectPtr newptr( value );
+    if( newptr == _py_null )
+        newptr.release();
     if( oldptr == newptr )
     {
         oldptr.release();
+        newptr.release();
         return 0;
     }
+    newptr.xincref();
     if( member->flags & MemberHasValidate )
     {
-        if( !oldptr )
-            oldptr.set( _py_null, true );
-        if( !newptr )
-            newptr.set( _py_null, true );
-        newptr = PyObject_CallMethodObjArgs(
-            self, _validate, owner, member->name, oldptr.get(), newptr.get(), 0
-        );
+        PyObjectPtr selfptr( newref( self ) );
+        PyObjectPtr callable( selfptr.get_attr( _validate ) );
+        if( !callable )
+            return -1;
+        PyTuplePtr args( 4 );
+        if( !args )
+            return -1;
+        args.initialize( 0, newref( owner ) );
+        args.initialize( 1, newref( member->name ) );
+        if( oldptr )
+            args.initialize( 2, oldptr );
+        else
+            args.initialize( 2, newref( _py_null ) );
+        if( newptr )
+            args.initialize( 3, newptr );
+        else
+            args.initialize( 3, newref( _py_null ) );
+        newptr = callable( args );
         if( !newptr )
             return -1;
-        if( newptr.get() == _py_null )
-            newptr.release( true );
+        if( newptr == _py_null )
+            newptr.decref_release();
     }
-    atom->data[ member->index ] = newptr.newref();
+    atom->data[ member->index ] = newptr.xnewref();
     size_t member_bit = member->index + INDEX_OFFSET;
     if( get_notify_bit( atom, ATOM_BIT ) && get_notify_bit( atom, member_bit ) )
     {
         if( !oldptr )
-            oldptr.set( _py_null, true );
+            oldptr.set( newref( _py_null ) );
         if( !newptr )
-            newptr.set( _py_null, true );
+            newptr.set( newref( _py_null ) );
         if( oldptr != newptr && !oldptr.richcompare( newptr, Py_EQ ) )
         {
+            PyObjectPtr ownerptr( newref( owner ) );
+            PyObjectPtr callable( ownerptr.get_attr( _notify ) );
+            if( !callable )
+                return -1;
+            PyTuplePtr args( 1 );
+            if( !args )
+                return -1;
             PyObjectPtr changeptr( PyType_GenericNew( &MemberChange_Type, 0, 0 ) );
             if( !changeptr )
                 return -1;
-            PyObjectPtr ownerptr( owner, true );
-            PyObjectPtr nameptr( member->name, true );
             MemberChange* change = reinterpret_cast<MemberChange*>( changeptr.get() );
             change->object = ownerptr.release();
-            change->name = nameptr.release();
+            change->name = newref( member->name );
             change->oldvalue = oldptr.release();
             change->newvalue = newptr.release();
-            PyObjectPtr result(
-                PyObject_CallMethodObjArgs( owner, _notify, changeptr.get(), 0 )
-            );
+            args.initialize( 0, changeptr );
+            PyObjectPtr result( callable( args ) );
             if( !result )
                 return -1;
         }
@@ -765,8 +777,7 @@ Member__set__( PyObject* self, PyObject* owner, PyObject* value )
 static PyObject*
 Member_get_name( Member* self, void* context )
 {
-    Py_INCREF( self->name );
-    return self->name;
+    return newref( self->name );
 }
 
 

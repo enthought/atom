@@ -4,6 +4,7 @@
 |----------------------------------------------------------------------------*/
 #include <vector>
 #include "pythonhelpers.h"
+#include "callbackhandler.h"
 
 
 using namespace PythonHelpers;
@@ -12,171 +13,20 @@ using namespace PythonHelpers;
 class ObserverPool
 {
 
-    class Topic
+    class Topic : public CallbackHandler
     {
-
-        struct ModifyTask
-        {
-            ModifyTask( Topic& topic, PyObjectPtr& observer ) :
-                m_topic( topic ), m_observer( observer ) {}
-            virtual ~ModifyTask() {}
-            virtual void run() = 0;
-            Topic& m_topic;
-            PyObjectPtr m_observer;
-        };
-
-        struct AddObserverTask : public ModifyTask
-        {
-            AddObserverTask( Topic& topic, PyObjectPtr& observer ) :
-                ModifyTask( topic, observer ) {}
-            void run() { m_topic.add_observer( m_observer ); }
-        };
-
-        struct RemoveObserverTask : public ModifyTask
-        {
-            RemoveObserverTask( Topic& topic, PyObjectPtr& observer ) :
-                ModifyTask( topic, observer ) {}
-            void run() { m_topic.remove_observer( m_observer ); }
-        };
-
-        class ModifyGuard
-        {
-
-        public:
-
-            ModifyGuard( Topic& topic ) : m_topic( topic )
-            {
-                if( !m_topic.m_modify_guard )
-                    m_topic.m_modify_guard = this;
-            }
-
-            ~ModifyGuard()
-            {
-                if( m_topic.m_modify_guard == this )
-                {
-                    m_topic.m_modify_guard = 0;
-                    std::vector<ModifyTask*>::iterator it;
-                    std::vector<ModifyTask*>::iterator end = m_tasks.end();
-                    for( it = m_tasks.begin(); it != end; ++it )
-                    {
-                        ( *it )->run();
-                        delete *it;
-                    }
-                }
-            }
-
-            void add_task( ModifyTask* task )
-            {
-                if( task )
-                    m_tasks.push_back( task );
-            }
-
-        private:
-
-            Topic& m_topic;
-            std::vector<ModifyTask*> m_tasks;
-
-        };
-
-        friend class ModifyGuard;
 
     public:
 
-        Topic( PyObjectPtr& topic ) : m_topic( topic ), m_modify_guard( 0 ) {}
+        Topic( PyObjectPtr& topic ) : m_topic( topic ) {}
 
         ~Topic() {}
 
-        bool match( PyObjectPtr& topic )
-        {
-            return topic == m_topic;
-        }
-
-        void add_observer( PyObjectPtr& observer )
-        {
-            if( !observer )
-                return;
-            if( m_modify_guard )
-            {
-                ModifyTask* task = new AddObserverTask( *this, observer );
-                m_modify_guard->add_task( task );
-                return;
-            }
-            std::vector<PyObjectPtr>::iterator it;
-            std::vector<PyObjectPtr>::iterator end = m_observers.end();
-            for( it = m_observers.begin(); it != end; ++it )
-            {
-                if( *it == observer || it->richcompare( observer, Py_EQ ) )
-                    return;
-            }
-            m_observers.push_back( observer );
-        }
-
-        void remove_observer( PyObjectPtr& observer )
-        {
-            if( !observer )
-                return;
-            if( m_modify_guard )
-            {
-                ModifyTask* task = new RemoveObserverTask( *this, observer );
-                m_modify_guard->add_task( task );
-                return;
-            }
-            std::vector<PyObjectPtr>::iterator it;
-            std::vector<PyObjectPtr>::iterator end = m_observers.end();
-            for( it = m_observers.begin(); it != end; ++it )
-            {
-                if( *it == observer || it->richcompare( observer, Py_EQ ) )
-                {
-                    m_observers.erase( it );
-                    return;
-                }
-            }
-        }
-
-        int notify_observers( PyObjectPtr& argument )
-        {
-            if( !argument )
-                return 0;
-            ModifyGuard guard( *this );
-            std::vector<PyObjectPtr>::iterator it;
-            std::vector<PyObjectPtr>::iterator end = m_observers.end();
-            for( it = m_observers.begin(); it != end; ++it )
-            {
-                if( it->is_true() )
-                {
-                    if( !it->operator()( argument ) )
-                        return -1;
-                }
-                else
-                {
-                    ModifyTask* task = new RemoveObserverTask( *this, *it );
-                    m_modify_guard->add_task( task );
-                }
-            }
-            return 0;
-        }
-
-        int py_traverse( visitproc visit, void* arg )
-        {
-            int vret = visit( m_topic.get(), arg );
-            if( vret )
-                return vret;
-            std::vector<PyObjectPtr>::iterator it;
-            std::vector<PyObjectPtr>::iterator end = m_observers.end();
-            for( it = m_observers.begin(); it != end; ++it )
-            {
-                vret = visit( it->get(), arg );
-                if( vret )
-                    return vret;
-            }
-            return 0;
-        }
+        bool match( PyObjectPtr& topic ) { return topic == m_topic; }
 
     private:
 
         PyObjectPtr m_topic;
-        std::vector<PyObjectPtr> m_observers;
-        ModifyGuard* m_modify_guard;
 
     };
 
@@ -188,48 +38,42 @@ public:
 
     void add_observer( PyObjectPtr& topic, PyObjectPtr& observer )
     {
-        if( !topic )
-            return;
         std::vector<Topic>::iterator it;
         std::vector<Topic>::iterator end = m_topics.end();
         for( it = m_topics.begin(); it != end; ++it )
         {
             if( it->match( topic ) )
             {
-                it->add_observer( observer );
+                it->add_callback( observer );
                 return;
             }
         }
         m_topics.push_back( Topic( topic ) );
-        m_topics.back().add_observer( observer );
+        m_topics.back().add_callback( observer );
     }
 
     void remove_observer( PyObjectPtr& topic, PyObjectPtr& observer )
     {
-        if( !topic )
-            return;
         std::vector<Topic>::iterator it;
         std::vector<Topic>::iterator end = m_topics.end();
         for( it = m_topics.begin(); it != end; ++it )
         {
             if( it->match( topic ) )
             {
-                it->remove_observer( observer );
+                it->remove_callback( observer );
                 return;
             }
         }
     }
 
-    int notify_observers( PyObjectPtr& topic, PyObjectPtr& argument )
+    int notify_observers( PyObjectPtr& topic, PyObjectPtr& args, PyObjectPtr& kwargs )
     {
-        if( !topic )
-            return 0;
         std::vector<Topic>::iterator it;
         std::vector<Topic>::iterator end = m_topics.end();
         for( it = m_topics.begin(); it != end; ++it )
         {
             if( it->match( topic ) )
-                return it->notify_observers( argument );
+                return it->invoke_callbacks( args, kwargs );
         }
         return 0;
     }
@@ -248,11 +92,7 @@ public:
         return 0;
     }
 
-    void py_clear()
-    {
-        m_topics.clear();
-    }
-
+    void py_clear() { m_topics.clear(); }
 
 private:
 
@@ -310,8 +150,8 @@ PyObserverPool_add_observer( PyObserverPool* self, PyObject* args )
         return py_expected_type_fail( topic, "str" );
     if( !PyString_CHECK_INTERNED( topic ) )
         PyString_InternInPlace( &topic );
-    PyObjectPtr topicptr( topic, true );
-    PyObjectPtr observerptr( observer, true );
+    PyObjectPtr topicptr( newref( topic ) );
+    PyObjectPtr observerptr( newref( observer ) );
     if( !self->pool )
         self->pool = new ObserverPool();
     self->pool->add_observer( topicptr, observerptr );
@@ -332,8 +172,8 @@ PyObserverPool_remove_observer( PyObserverPool* self, PyObject* args )
         Py_RETURN_NONE;
     if( !PyString_CHECK_INTERNED( topic ) )
         PyString_InternInPlace( &topic );
-    PyObjectPtr topicptr( topic, true );
-    PyObjectPtr observerptr( observer, true );
+    PyObjectPtr topicptr( newref( topic ) );
+    PyObjectPtr observerptr( newref( observer ) );
     self->pool->remove_observer( topicptr, observerptr );
     Py_RETURN_NONE;
 }
@@ -352,10 +192,13 @@ PyObserverPool_notify_observers( PyObserverPool* self, PyObject* args )
         PyString_InternInPlace( &topic );
     if( self->pool )
     {
-        PyObjectPtr topicptr( topic, true );
-        PyTuplePtr argsptr( PyTuple_New( 1 ) );
-        argsptr.set_item( 0, argument, true );
-        if( self->pool->notify_observers( topicptr, argsptr ) < 0 )
+        PyObjectPtr topicptr( newref( topic ) );
+        PyTuplePtr argsptr( 1 );
+        if( !argsptr )
+            return 0;
+        argsptr.initialize( 0, newref( argument ) );
+        PyObjectPtr kwargsptr( 0 );
+        if( self->pool->notify_observers( topicptr, argsptr, kwargsptr ) < 0 )
             return 0;
     }
     Py_RETURN_NONE;

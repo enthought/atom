@@ -49,7 +49,7 @@ EventBinder_dealloc( EventBinder* self )
 static PyObject*
 EventBinder_bind( EventBinder* self, PyObject* callback )
 {
-    PyObjectPtr callbackptr( callback, true );
+    PyObjectPtr callbackptr( newref( callback ) );
     if( !self->handler )
         self->handler = new CallbackHandler();
     self->handler->add_callback( callbackptr );
@@ -62,7 +62,7 @@ EventBinder_unbind( EventBinder* self, PyObject* callback )
 {
     if( self->handler )
     {
-        PyObjectPtr callbackptr( callback, true );
+        PyObjectPtr callbackptr( newref( callback ) );
         self->handler->remove_callback( callbackptr );
     }
     Py_RETURN_NONE;
@@ -78,7 +78,7 @@ EventBinder__call__( EventBinder* self, PyObject* args, PyObject* kwargs )
         return py_type_fail( "EventBinder.__call__ accepts at most 1 argument" );
     if( self->handler )
     {
-        PyTuplePtr argsptr( args, true );
+        PyTuplePtr argsptr( newref( args ) );
         PyDictPtr kwargsptr( 0 );
         if( self->handler->invoke_callbacks( argsptr, kwargsptr ) < 0 )
             return 0;

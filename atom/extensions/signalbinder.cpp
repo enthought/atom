@@ -49,7 +49,7 @@ SignalBinder_dealloc( SignalBinder* self )
 static PyObject*
 SignalBinder_connect( SignalBinder* self, PyObject* callback )
 {
-    PyObjectPtr callbackptr( callback, true );
+    PyObjectPtr callbackptr( newref( callback ) );
     if( !self->handler )
         self->handler = new CallbackHandler();
     self->handler->add_callback( callbackptr );
@@ -62,7 +62,7 @@ SignalBinder_disconnect( SignalBinder* self, PyObject* callback )
 {
     if( self->handler )
     {
-        PyObjectPtr callbackptr( callback, true );
+        PyObjectPtr callbackptr( newref( callback ) );
         self->handler->remove_callback( callbackptr );
     }
     Py_RETURN_NONE;
@@ -74,8 +74,8 @@ SignalBinder__call__( SignalBinder* self, PyObject* args, PyObject* kwargs )
 {
     if( self->handler )
     {
-        PyTuplePtr argsptr( args, true );
-        PyDictPtr kwargsptr( kwargs, true );
+        PyTuplePtr argsptr( newref( args ) );
+        PyDictPtr kwargsptr( xnewref( kwargs ) );
         if( self->handler->invoke_callbacks( argsptr, kwargsptr ) < 0 )
             return 0;
     }

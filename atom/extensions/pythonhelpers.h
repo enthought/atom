@@ -64,26 +64,36 @@ py_no_attr_fail( PyObject* pyobj, const char* attr )
 /*-----------------------------------------------------------------------------
 | Object Ptr
 |----------------------------------------------------------------------------*/
+inline PyObject*
+newref( PyObject* pyobj )
+{
+    Py_INCREF( pyobj );
+    return pyobj;
+}
+
+
+inline PyObject*
+xnewref( PyObject* pyobj )
+{
+    Py_XINCREF( pyobj );
+    return pyobj;
+}
+
+
 class PyObjectPtr {
 
 public:
 
-    PyObjectPtr() : m_pyobj( 0 ) { }
+    PyObjectPtr() : m_pyobj( 0 ) {}
 
-    PyObjectPtr( const PyObjectPtr& objptr ) : m_pyobj( objptr.m_pyobj )
-    {
-        incref();
-    }
+    PyObjectPtr( const PyObjectPtr& objptr ) :
+        m_pyobj( PythonHelpers::xnewref( objptr.m_pyobj ) ) {}
 
-    PyObjectPtr( PyObject* pyobj, bool takeref=false ) : m_pyobj( pyobj )
-    {
-        if( takeref )
-            incref();
-    }
+    PyObjectPtr( PyObject* pyobj ) : m_pyobj( pyobj ) {}
 
     ~PyObjectPtr()
     {
-        release( true );
+        xdecref_release();
     }
 
     PyObject* get() const
@@ -91,38 +101,82 @@ public:
         return m_pyobj;
     }
 
-    PyObject* newref() const
-    {
-        Py_XINCREF( m_pyobj );
-        return m_pyobj;
-    }
-
-    void set( PyObject* pyobj, bool takeref=false )
+    void set( PyObject* pyobj )
     {
         PyObject* old = m_pyobj;
         m_pyobj = pyobj;
-        if( takeref )
-            Py_XINCREF( m_pyobj );
         Py_XDECREF( old );
     }
 
-    PyObject* release( bool giveref=false )
+    PyObject* release()
     {
         PyObject* pyobj = m_pyobj;
         m_pyobj = 0;
-        if( giveref )
-            Py_XDECREF( pyobj );
+        return pyobj;
+    }
+
+    PyObject* decref_release()
+    {
+        PyObject* pyobj = m_pyobj;
+        m_pyobj = 0;
+        Py_DECREF( pyobj );
+        return pyobj;
+    }
+
+    PyObject* xdecref_release()
+    {
+        PyObject* pyobj = m_pyobj;
+        m_pyobj = 0;
+        Py_XDECREF( pyobj );
+        return pyobj;
+    }
+
+    PyObject* incref_release()
+    {
+        PyObject* pyobj = m_pyobj;
+        m_pyobj = 0;
+        Py_INCREF( pyobj );
+        return pyobj;
+    }
+
+    PyObject* xincref_release()
+    {
+        PyObject* pyobj = m_pyobj;
+        m_pyobj = 0;
+        Py_XINCREF( pyobj );
         return pyobj;
     }
 
     void incref() const
     {
-        Py_XINCREF( m_pyobj );
+        Py_INCREF( m_pyobj );
     }
 
     void decref() const
     {
+        Py_DECREF( m_pyobj );
+    }
+
+    void xincref() const
+    {
+        Py_XINCREF( m_pyobj );
+    }
+
+    void xdecref() const
+    {
         Py_XDECREF( m_pyobj );
+    }
+
+    PyObject* newref() const
+    {
+        Py_INCREF( m_pyobj );
+        return m_pyobj;
+    }
+
+    PyObject* xnewref() const
+    {
+        Py_XINCREF( m_pyobj );
+        return m_pyobj;
     }
 
     size_t refcount() const
@@ -166,7 +220,7 @@ public:
             return false;
         if( forcecreate && !*dict )
             *dict = PyDict_New();
-        out = PyObjectPtr( *dict, true );
+        out = PythonHelpers::xnewref( *dict );
         return true;
     }
 
@@ -182,6 +236,11 @@ public:
         return false;
     }
 
+    bool has_attr( PyObject* attr )
+    {
+        return PyObject_HasAttr( m_pyobj, attr );
+    }
+
     bool has_attr( PyObjectPtr& attr )
     {
         return PyObject_HasAttr( m_pyobj, attr.get() );
@@ -195,6 +254,11 @@ public:
     bool has_attr( std::string& attr )
     {
         return has_attr( attr.c_str() );
+    }
+
+    PyObjectPtr get_attr( PyObject* attr )
+    {
+        return PyObjectPtr( PyObject_GetAttr( m_pyobj, attr ) );
     }
 
     PyObjectPtr get_attr( PyObjectPtr& attr )
@@ -259,9 +323,37 @@ operator!=( const PyObjectPtr& lhs, const PyObjectPtr& rhs )
 
 
 inline bool
+operator!=( const PyObject* lhs, const PyObjectPtr& rhs )
+{
+    return lhs != rhs.get();
+}
+
+
+inline bool
+operator!=( const PyObjectPtr& lhs, const PyObject* rhs )
+{
+    return lhs.get() != rhs;
+}
+
+
+inline bool
 operator==( const PyObjectPtr& lhs, const PyObjectPtr& rhs )
 {
     return lhs.get() == rhs.get();
+}
+
+
+inline bool
+operator==( const PyObject* lhs, const PyObjectPtr& rhs )
+{
+    return lhs == rhs.get();
+}
+
+
+inline bool
+operator==( const PyObjectPtr& lhs, const PyObject* rhs )
+{
+    return lhs.get() == rhs;
 }
 
 
@@ -272,12 +364,13 @@ class PyTuplePtr : public PyObjectPtr {
 
 public:
 
-    PyTuplePtr() : PyObjectPtr() { }
+    PyTuplePtr() : PyObjectPtr() {}
 
-    PyTuplePtr( const PyObjectPtr& objptr ) : PyObjectPtr( objptr ) { }
+    PyTuplePtr( const PyObjectPtr& objptr ) : PyObjectPtr( objptr ) {}
 
-    PyTuplePtr( PyObject* pytuple, bool takeref=false ) :
-        PyObjectPtr( pytuple, takeref ) { }
+    PyTuplePtr( PyObject* pytuple ) : PyObjectPtr( pytuple ) {}
+
+    PyTuplePtr( Py_ssize_t size ) : PyObjectPtr( PyTuple_New( size ) ) {}
 
     bool check()
     {
@@ -296,24 +389,35 @@ public:
 
     PyObjectPtr get_item( Py_ssize_t index ) const
     {
-        return PyObjectPtr( PyTuple_GET_ITEM( m_pyobj, index ), true );
+        return PyObjectPtr( PythonHelpers::newref( PyTuple_GET_ITEM( m_pyobj, index ) ) );
     }
 
-    void set_item( Py_ssize_t index, PyObject* pyobj, bool takeref=false )
+    void set_item( Py_ssize_t index, PyObject* pyobj )
     {
-        Py_XDECREF( PyTuple_GET_ITEM( m_pyobj, index ) );
+        PyObject* old_item = PyTuple_GET_ITEM( m_pyobj, index );
         PyTuple_SET_ITEM( m_pyobj, index, pyobj );
-        if( takeref )
-            Py_XINCREF( pyobj );
+        Py_XDECREF( old_item );
     }
 
     void set_item( Py_ssize_t index, PyObjectPtr& item )
     {
-        PyObject* new_item = item.get();
         PyObject* old_item = PyTuple_GET_ITEM( m_pyobj, index );
-        PyTuple_SET_ITEM( m_pyobj, index, new_item );
-        Py_XINCREF( new_item );
+        PyTuple_SET_ITEM( m_pyobj, index, item.get() );
+        Py_XINCREF( item.get() );
         Py_XDECREF( old_item );
+    }
+
+    // pyobj must not be null, only use to fill a new empty tuple
+    void initialize( Py_ssize_t index, PyObject* pyobj )
+    {
+        PyTuple_SET_ITEM( m_pyobj, index, pyobj );
+    }
+
+    // ptr must not be empty, only use to fill a new empty tuple
+    void initialize( Py_ssize_t index, PyObjectPtr& item )
+    {
+        PyTuple_SET_ITEM( m_pyobj, index, item.get() );
+        Py_INCREF( item.get() );
     }
 
 };
@@ -326,12 +430,11 @@ class PyListPtr : public PyObjectPtr {
 
 public:
 
-    PyListPtr() : PyObjectPtr() { }
+    PyListPtr() : PyObjectPtr() {}
 
-    PyListPtr( const PyObjectPtr& objptr ) : PyObjectPtr( objptr ) { }
+    PyListPtr( const PyObjectPtr& objptr ) : PyObjectPtr( objptr ) {}
 
-    PyListPtr( PyObject* pylist, bool takeref=false ) :
-        PyObjectPtr( pylist, takeref ) { }
+    PyListPtr( PyObject* pylist ) : PyObjectPtr( pylist ) {}
 
     bool check()
     {
@@ -350,15 +453,14 @@ public:
 
     PyObjectPtr get_item( Py_ssize_t index ) const
     {
-        return PyObjectPtr( PyList_GET_ITEM( m_pyobj, index ), true );
+        return PyObjectPtr( PythonHelpers::newref( PyList_GET_ITEM( m_pyobj, index ) ) );
     }
 
     void set_item( Py_ssize_t index, PyObjectPtr& item )
     {
-        PyObject* new_item = item.get();
         PyObject* old_item = PyList_GET_ITEM( m_pyobj, index );
-        PyList_SET_ITEM( m_pyobj, index, new_item );
-        Py_XINCREF( new_item );
+        PyList_SET_ITEM( m_pyobj, index, item.get() );
+        Py_XINCREF( item.get() );
         Py_XDECREF( old_item );
     }
 
@@ -398,12 +500,11 @@ class PyDictPtr : public PyObjectPtr {
 
 public:
 
-    PyDictPtr() : PyObjectPtr() { }
+    PyDictPtr() : PyObjectPtr() {}
 
-    PyDictPtr( const PyObjectPtr& objptr ) : PyObjectPtr( objptr ) { }
+    PyDictPtr( const PyObjectPtr& objptr ) : PyObjectPtr( objptr ) {}
 
-    PyDictPtr( PyObject* pydict, bool takeref=false ) :
-        PyObjectPtr( pydict, takeref ) { }
+    PyDictPtr( PyObject* pydict ) : PyObjectPtr( pydict ) {}
 
     bool check()
     {
@@ -422,17 +523,17 @@ public:
 
     PyObjectPtr get_item( PyObject* key ) const
     {
-        return PyObjectPtr( PyDict_GetItem( m_pyobj, key ), true );
+        return PyObjectPtr( PythonHelpers::xnewref( PyDict_GetItem( m_pyobj, key ) ) ) ;
     }
 
     PyObjectPtr get_item( PyObjectPtr& key ) const
     {
-        return PyObjectPtr( PyDict_GetItem( m_pyobj, key.get() ), true );
+        return PyObjectPtr( PythonHelpers::xnewref( PyDict_GetItem( m_pyobj, key.get() ) ) );
     }
 
     PyObjectPtr get_item( const char* key ) const
     {
-        return PyObjectPtr( PyDict_GetItemString( m_pyobj, key ), true );
+        return PyObjectPtr( PythonHelpers::xnewref( PyDict_GetItemString( m_pyobj, key ) ) );
     }
 
     PyObjectPtr get_item( std::string& key ) const
@@ -488,12 +589,11 @@ class PyMethodPtr : public PyObjectPtr {
 
 public:
 
-    PyMethodPtr() : PyObjectPtr() { }
+    PyMethodPtr() : PyObjectPtr() {}
 
-    PyMethodPtr( const PyObjectPtr& objptr ) : PyObjectPtr( objptr ) { }
+    PyMethodPtr( const PyObjectPtr& objptr ) : PyObjectPtr( objptr ) {}
 
-    PyMethodPtr( PyObject* pymethod, bool takeref=false ) :
-        PyObjectPtr( pymethod, takeref ) { }
+    PyMethodPtr( PyObject* pymethod ) : PyObjectPtr( pymethod ) {}
 
     bool check()
     {
@@ -502,17 +602,17 @@ public:
 
     PyObjectPtr get_self() const
     {
-        return PyObjectPtr( PyMethod_GET_SELF( m_pyobj ), true );
+        return PyObjectPtr( PythonHelpers::xnewref( PyMethod_GET_SELF( m_pyobj ) ) );
     }
 
     PyObjectPtr get_function() const
     {
-        return PyObjectPtr( PyMethod_GET_FUNCTION( m_pyobj ), true );
+        return PyObjectPtr( PythonHelpers::xnewref( PyMethod_GET_FUNCTION( m_pyobj ) ) );
     }
 
     PyObjectPtr get_class() const
     {
-        return PyObjectPtr( PyMethod_GET_CLASS( m_pyobj ), true );
+        return PyObjectPtr( PythonHelpers::xnewref( PyMethod_GET_CLASS( m_pyobj ) ) );
     }
 
 };
@@ -525,12 +625,11 @@ class PyWeakrefPtr : public PyObjectPtr {
 
 public:
 
-    PyWeakrefPtr() : PyObjectPtr() { }
+    PyWeakrefPtr() : PyObjectPtr() {}
 
-    PyWeakrefPtr( const PyObjectPtr& objptr ) : PyObjectPtr( objptr ) { }
+    PyWeakrefPtr( const PyObjectPtr& objptr ) : PyObjectPtr( objptr ) {}
 
-    PyWeakrefPtr( PyObject* pyweakref, bool takeref=true ) :
-        PyObjectPtr( pyweakref, takeref ) { }
+    PyWeakrefPtr( PyObject* pyweakref ) : PyObjectPtr( pyweakref ) {}
 
     bool check()
     {
@@ -544,7 +643,7 @@ public:
 
     PyObjectPtr get_object() const
     {
-        return PyObjectPtr( PyWeakref_GET_OBJECT( m_pyobj ), true );
+        return PyObjectPtr( PythonHelpers::newref( PyWeakref_GET_OBJECT( m_pyobj ) ) );
     }
 
 };
