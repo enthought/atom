@@ -276,6 +276,16 @@ public:
         return get_attr( attr.c_str() );
     }
 
+    bool set_attr( PyObject* attr, PyObject* value )
+    {
+        return PyObject_SetAttr( m_pyobj, attr, value ) == 0;
+    }
+
+    bool set_attr( PyObjectPtr& attr, PyObjectPtr& value )
+    {
+        return PyObject_SetAttr( m_pyobj, attr.get(), value.get() ) == 0;
+    }
+
     PyObjectPtr operator()( PyObjectPtr& args ) const
     {
         return PyObjectPtr( PyObject_Call( m_pyobj, args.get(), 0 ) );

@@ -331,6 +331,7 @@ PyTypeObject MemberChange_Type = {
 static int
 Member_Check( PyObject* member );
 
+
 static int
 Member__set__( PyObject* self, PyObject* owner, PyObject* value );
 
@@ -387,6 +388,17 @@ CAtom_new( PyTypeObject* type, PyObject* args, PyObject* kwargs )
         CAtom* atom = reinterpret_cast<CAtom*>( selfptr.get() );
         atom->data = reinterpret_cast<PyObject**>( data );
         atom->count = count;
+    }
+    if( kwargs )
+    {
+        PyObject* key;
+        PyObject* value;
+        Py_ssize_t pos = 0;
+        while( PyDict_Next( kwargs, &pos, &key, &value ) )
+        {
+            if( !selfptr.set_attr( key, value ) )
+                return 0;
+        }
     }
     return selfptr.release();
 }
@@ -653,6 +665,44 @@ Member_dealloc( Member* self )
 
 
 static PyObject*
+Member_getfast( PyObject* self, PyObject* owner )
+{
+    if( !PyObject_TypeCheck( owner, &CAtom_Type ) )
+        return py_expected_type_fail( owner, "CAtom" );
+    CAtom* atom = reinterpret_cast<CAtom*>( owner );
+    Member* member = reinterpret_cast<Member*>( self );
+    if( member->index >= atom->count )
+        return py_no_attr_fail( owner, PyString_AsString( member->name ) );
+    PyObjectPtr value( atom->data[ member->index ] );
+    if( value )
+        return value.incref_release();
+    return newref( _py_null );
+}
+
+
+static PyObject*
+Member_setfast( PyObject* self, PyObject* args )
+{
+    if( PyTuple_GET_SIZE( args ) != 2 )
+        return py_type_fail( "'setfast' takes exactly 2 arguments" );
+    PyObject* owner = PyTuple_GET_ITEM( args, 0 );
+    PyObject* value = PyTuple_GET_ITEM( args, 1 );
+    if( !PyObject_TypeCheck( owner, &CAtom_Type ) )
+        return py_expected_type_fail( owner, "CAtom" );
+    CAtom* atom = reinterpret_cast<CAtom*>( owner );
+    Member* member = reinterpret_cast<Member*>( self );
+    if( member->index >= atom->count )
+        return py_no_attr_fail( owner, PyString_AsString( member->name ) );
+    if( value == _py_null )
+        value = 0;
+    PyObject* old = atom->data[ member->index ];
+    atom->data[ member->index ] = xnewref( value );
+    Py_XDECREF( old );
+    Py_RETURN_NONE;
+}
+
+
+static PyObject*
 Member__get__( PyObject* self, PyObject* owner, PyObject* type )
 {
     if( !owner )
@@ -895,13 +945,25 @@ Member_getset[] = {
 };
 
 
+static PyMethodDef
+Member_methods[] = {
+    { "getfast",
+      ( PyCFunction )Member_getfast, METH_O,
+      "Get the value for the atom, skipping default value lookup." },
+    { "setfast",
+      ( PyCFunction )Member_setfast, METH_VARARGS,
+      "Set the value for the atom, skipping validation and notification." },
+    { 0 } // sentinel
+};
+
+
 PyTypeObject Member_Type = {
     PyObject_HEAD_INIT( &PyType_Type )
     0,                                      /* ob_size */
-    "catom.Member",                        /* tp_name */
-    sizeof( Member ),                      /* tp_basicsize */
+    "catom.Member",                         /* tp_name */
+    sizeof( Member ),                       /* tp_basicsize */
     0,                                      /* tp_itemsize */
-    (destructor)Member_dealloc,            /* tp_dealloc */
+    (destructor)Member_dealloc,             /* tp_dealloc */
     (printfunc)0,                           /* tp_print */
     (getattrfunc)0,                         /* tp_getattr */
     (setattrfunc)0,                         /* tp_setattr */
@@ -924,17 +986,17 @@ PyTypeObject Member_Type = {
     0,                                      /* tp_weaklistoffset */
     (getiterfunc)0,                         /* tp_iter */
     (iternextfunc)0,                        /* tp_iternext */
-    (struct PyMethodDef*)0,                 /* tp_methods */
+    (struct PyMethodDef*)Member_methods,    /* tp_methods */
     (struct PyMemberDef*)0,                 /* tp_members */
-    Member_getset,                         /* tp_getset */
+    Member_getset,                          /* tp_getset */
     0,                                      /* tp_base */
     0,                                      /* tp_dict */
-    (descrgetfunc)Member__get__,           /* tp_descr_get */
-    (descrsetfunc)Member__set__,           /* tp_descr_set */
+    (descrgetfunc)Member__get__,            /* tp_descr_get */
+    (descrsetfunc)Member__set__,            /* tp_descr_set */
     0,                                      /* tp_dictoffset */
     (initproc)0,                            /* tp_init */
     (allocfunc)PyType_GenericAlloc,         /* tp_alloc */
-    (newfunc)Member_new,                   /* tp_new */
+    (newfunc)Member_new,                    /* tp_new */
     (freefunc)PyObject_Del,                 /* tp_free */
     (inquiry)0,                             /* tp_is_gc */
     0,                                      /* tp_bases */

@@ -15,7 +15,8 @@ atom_extensions = Feature(
         ),
         Extension(
             'atom.extensions.observerpool',
-            ['atom/extensions/observerpool.cpp'],
+            ['atom/extensions/observerpool.cpp',
+            'atom/extensions/callbackhandler.cpp'],
             language='c++',
         ),
         Extension(
