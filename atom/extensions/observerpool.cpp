@@ -2,8 +2,8 @@
 |  Copyright (c) 2013, Enthought, Inc.
 |  All rights reserved.
 |----------------------------------------------------------------------------*/
-#include "pythonhelpers.h"
 #include <vector>
+#include "pythonhelpers.h"
 
 
 using namespace PythonHelpers;

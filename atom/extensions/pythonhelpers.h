@@ -251,13 +251,15 @@ protected:
 };
 
 
-bool operator!=( const PyObjectPtr& lhs, const PyObjectPtr& rhs )
+inline bool
+operator!=( const PyObjectPtr& lhs, const PyObjectPtr& rhs )
 {
     return lhs.get() != rhs.get();
 }
 
 
-bool operator==( const PyObjectPtr& lhs, const PyObjectPtr& rhs )
+inline bool
+operator==( const PyObjectPtr& lhs, const PyObjectPtr& rhs )
 {
     return lhs.get() == rhs.get();
 }

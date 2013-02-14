@@ -18,6 +18,18 @@ atom_extensions = Feature(
             ['atom/extensions/observerpool.cpp'],
             language='c++',
         ),
+        Extension(
+            'atom.extensions.eventbinder',
+            ['atom/extensions/eventbinder.cpp',
+             'atom/extensions/callbackhandler.cpp'],
+            language='c++',
+        ),
+        Extension(
+            'atom.extensions.signalbinder',
+            ['atom/extensions/signalbinder.cpp',
+             'atom/extensions/callbackhandler.cpp'],
+            language='c++',
+        ),
     ],
 )
 

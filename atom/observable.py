@@ -6,9 +6,8 @@ import re
 from types import MethodType
 from weakref import ref
 
-from .atom import Atom, AtomMeta
-from .catom import MemberChange, null
-from .members import Member, Value, ReadOnly
+from .atom import Atom
+from .members import Value
 from .observerpool import ObserverPool
 
 
@@ -72,61 +71,10 @@ class _MethodObserver(object):
             return MethodType(self.im_func, im_self, type(im_self))
 
 
-class EventBinder(Atom):
-
-    owner = ReadOnly()
-
-    kind = ReadOnly()
-
-    name = ReadOnly()
-
-    def __call__(self, argument):
-        if not isinstance(argument, self.kind):
-            raise TypeError('Event argument has invalid type')
-        change = MemberChange(self.owner, self.name, null, argument)
-        self.owner.notify(change)
-
-
-class Event(object):
-
-    __slots__ = ('_kind', '_name')
-
-    def __init__(self, kind=object):
-        assert isinstance(kind, type)
-        self._kind = kind
-
-    def __get__(self, owner, cls):
-        if owner is None:
-            return self
-        name = self._name
-        kind = self._kind
-        binder = EventBinder.create(owner=owner, name=name, kind=kind)
-        return binder
-
-    def __set__(self, owner, value):
-        name = self._name
-        kind = self._kind
-        EventBinder.create(owner=owner, name=name, kind=kind)(value)
-
-
-class ObservableMeta(AtomMeta):
-    """ The meta class for the Observable class.
-
-    """
-    def __new__(meta, name, bases, dct):
-        cls = AtomMeta.__new__(meta, name, bases, dct)
-        for key, value in dct.iteritems():
-            if isinstance(value, Event):
-                value._name = key
-        return cls
-
-
 class Observable(Atom):
     """ An `Atom` subclass which implements the observer pattern.
 
     """
-    __metaclass__ = ObservableMeta
-
     #: Private storage for the observer pool. The pool is created on the
     #: fly instead of as a default value so that it's not created in the
     #: `notify` method. This saves space for subclasses which override
