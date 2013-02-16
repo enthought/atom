@@ -58,6 +58,14 @@ py_value_fail( const char* message )
 
 
 inline PyObject*
+py_runtime_fail( const char* message )
+{
+    PyErr_SetString( PyExc_RuntimeError, message );
+    return 0;
+}
+
+
+inline PyObject*
 py_attr_fail( const char* message )
 {
     PyErr_SetString( PyExc_AttributeError, message );
