@@ -45,11 +45,21 @@ public:
 
     int notify( PyObjectPtr& topic, PyObjectPtr& args, PyObjectPtr& kwargs );
 
-    Py_ssize_t py_sizeof() { return 0; };
+    Py_ssize_t py_sizeof()
+    {
+        Py_ssize_t size = sizeof( ModifyGuard* );
+        size += sizeof( std::vector<Topic> ) + sizeof( Topic ) * m_topics.capacity();
+        size += sizeof( std::vector<PyObjectPtr> ) + sizeof( PyObjectPtr ) * m_observers.capacity();
+        return size;
+    };
 
     int py_traverse( visitproc visit, void* arg );
 
-    void py_clear() { m_topics.clear(); m_observers.clear(); }
+    void py_clear()
+    {
+        m_topics.clear();
+        m_observers.clear();
+    }
 
 private:
 
