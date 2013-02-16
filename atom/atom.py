@@ -2,10 +2,75 @@
 #  Copyright (c) 2013, Enthought, Inc.
 #  All rights reserved.
 #------------------------------------------------------------------------------
-import contextlib
+from contextlib import contextmanager
 import re
+from types import FunctionType
 
 from .catom import CAtom, Member
+
+
+def _clone_member(member):
+    """ Make a clone of a member.
+
+    This method will attempt to find a `clone` method on the member. In
+    its absence, it will invoke the default constructor. No C++ data is
+    copied from the old member to the new member.
+
+    Parameters
+    ----------
+    member : Member
+        The member to clone.
+
+    Returns
+    -------
+    result : Member
+        The cloned member.
+
+    """
+    if hasattr(member, 'clone'):
+        clone = member.clone()
+    else:
+        clone = type(member)()
+    return clone
+
+
+class observe(object):
+    """ A decorator which can be used to observe members on a class.
+
+    class Foo(Atom)
+        a = Member()
+        b = Member()
+        @observe('a|b', regex=True)
+        def printer(self, change):
+            print change
+
+    """
+    def __init__(self, name, regex=False):
+        """ Initialize an observe decorator.
+
+        Parameters
+        ----------
+        name : str
+            The name or pattern string to use for matching names.
+
+        regex : bool, optional
+            If True, `name` is a regex pattern string to match against
+            the class' member names. The default is False.
+
+        """
+        assert isinstance(name, str), "name must be a string"
+        self.name = name
+        self.regex = regex
+        self.func = None
+        self.func_name = None
+
+    def __call__(self, func):
+        """ Called to decorate the function.
+
+        """
+        assert isinstance(func, FunctionType), "func must be a function"
+        self.func = func
+        return self
 
 
 class AtomMeta(type):
@@ -22,24 +87,103 @@ class AtomMeta(type):
 
     """
     def __new__(meta, name, bases, dct):
+        # Unless the developer requests slots, they are automatically
+        # turned off. This prevents the creation of instance dicts and
+        # other space consuming features unless explicitly requested.
         if '__slots__' not in dct:
             dct['__slots__'] = ()
+
+        # Pass over the class dict once and collect the static observers.
+        # The decorated versions swap the functions back into the dict.
+        mangled = []
+        decorated = []
+        dec_seen = set()
+        for key, value in dct.iteritems():
+            if isinstance(value, observe):
+                if value in dec_seen:
+                    msg = 'cannot bind `observe` to multiple names'
+                    raise TypeError(msg)
+                dec_seen.add(value)
+                decorated.append(value)
+                value.func_name = key
+                value = value.func
+                dct[key] = value
+            if key.startswith('_observe_') and isinstance(value, FunctionType):
+                mangled.append(key)
+
+        # Create the class object.
         cls = type.__new__(meta, name, bases, dct)
+
+        # Walk the mro of the class, exluding itself, in reverse order
+        # collecting all of the members into a single dict. The reverse
+        # update preserves the mro of overridden members.
         members = {}
         for base in reversed(cls.__mro__[1:-1]):
             if base is not CAtom and issubclass(base, CAtom):
                 members.update(base.__atom_members__)
-        count = len(members)
+
+        # Walk the dict a second time to collect the class members. This
+        # assings the name and the index to the member. If a member is
+        # overriding an existing member, the index of the old member is
+        # reused and any static observers are copied over.
+        these_members = set()
         for key, value in dct.iteritems():
             if isinstance(value, Member):
+                if value in these_members:
+                    raise TypeError('cannot bind member to multiple names')
+                these_members.add(value)
                 value._name = key
                 if key in members:
-                    value._index = members[key]._index
+                    supermember = members[key]
+                    members[key] = value
+                    value._index = supermember._index
+                    value.copy_static_observers(supermember)
                 else:
-                    value._index = count
-                    count += 1
-                members[key] = value
+                    value._index = len(members)
+                    members[key] = value
+
+        # Add the mangled name static observers. If the matching member
+        # is defined on a sublass, it must be cloned as to not effect
+        # subclass instances.
+        for mangled_name in mangled:
+            target = mangled_name[9:]
+            if target in members:
+                member = members[target]
+                if member not in these_members:
+                    clone = _clone_member(member)
+                    clone.copy_static_observers(member)
+                    member = members[target] = clone
+                    setattr(cls, target, member)
+                member.add_static_observer(mangled_name)
+
+        # Add the decorated static observers. If the matching member
+        # is defined on a sublass, it must be cloned as to not effect
+        # subclass instances.
+        for ob in decorated:
+            if not ob.regex:
+                if ob.name in members:
+                    member = members[ob.name]
+                    if member not in these_members:
+                        clone = _clone_member(member)
+                        clone.copy_static_observers(member)
+                        member = members[ob.name] = clone
+                        setattr(cls, ob.name, member)
+                    member.add_static_observer(ob.func_name)
+            else:
+                rgx = re.compile(ob.name)
+                for key, member in members.iteritems():
+                    if rgx.match(key):
+                        if member not in these_members:
+                            clone = _clone_member(member)
+                            clone.copy_static_observers(member)
+                            member = members[key] = clone
+                            setattr(cls, key, member)
+                        member.add_static_observer(ob.func_name)
+
+        # Put a reference to the members dict on the class. This is used
+        # by CAtom to query for the members and member count as needed.
         cls.__atom_members__ = members
+
         return cls
 
 
@@ -72,66 +216,19 @@ class Atom(CAtom):
         """
         return cls.__atom_members__
 
-    @classmethod
-    def create(cls, **kwargs):
-        """ Create an instance of this Atom class from keywords.
-
-        This method will create an empy instance of the class and then
-        populate it with the given keywords using the `update_members`
-        method.
-
-        This method only makes sense for those subclasses which do not
-        override the __init__ method with one which requires arguments.
-
-        """
-        self = cls()
-        self.update_members(**kwargs)
-        return self
-
-    @contextlib.contextmanager
-    def suppress_notifications(self, name=None, regex=False):
+    @contextmanager
+    def suppress_notifications(self):
         """ Disable member notifications within in a context.
-
-        Parameters
-        ----------
-        name : str, optional
-            The member name on which to suppress notifications. If not
-            given, all notifications will be suppressed. The default is
-            None.
-
-        regex : bool, optional
-            If True, the `name` is a regex pattern. All members with a
-            matching name will be suppressed. The default is False.
 
         Returns
         -------
         result : contextmanager
-            A context manager which disables the relevant notifications
-            for the duration of the context. When the context exits,
-            the notification state is retored to its previous state.
+            A context manager which disables atom notifications for the
+            duration of the context. When the context exits, the state
+            is restored to its previous value.
 
         """
-        if name is None:
-            reenable = self.notifications_enabled()
-            if reenable:
-                self.disable_notifications()
-            yield
-            if reenable:
-                self.enable_notifications()
-        else:
-            disabled = []
-            members = self.members()
-            if not regex and name in members:
-                if self.notifications_enabled(name):
-                    self.disable_notifications(name)
-                    disabled.append(name)
-            else:
-                rgx = re.compile(name)
-                for key in members:
-                    if rgx.match(key) and self.notifications_enabled(key):
-                        self.disable_notifications(key)
-                        disabled.append(key)
-            yield
-            for name in disabled:
-                self.enable_notifications(name)
+        old = self.set_notifications_enabled(False)
+        yield
+        self.set_notifications_enabled(old)
 

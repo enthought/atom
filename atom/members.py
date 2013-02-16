@@ -2,7 +2,12 @@
 #  Copyright (c) 2013, Enthought, Inc.
 #  All rights reserved.
 #------------------------------------------------------------------------------
-from .catom import Member, null
+from .catom import (
+    Member, VALIDATE_READ_ONLY, VALIDATE_CONSTANT, VALIDATE_BOOL, VALIDATE_INT,
+    VALIDATE_LONG, VALIDATE_FLOAT, VALIDATE_STR, VALIDATE_UNICODE,
+    VALIDATE_TUPLE, VALIDATE_LIST, VALIDATE_DICT, VALIDATE_ENUM, DEFAULT_VALUE,
+    DEFAULT_FACTORY
+)
 
 
 class Value(Member):
@@ -12,7 +17,7 @@ class Value(Member):
     but does not perform any type checking or validation.
 
     """
-    __slots__ = ('_default', '_factory')
+    __slots__ = ()
 
     def __init__(self, default=None, factory=None):
         """ Initialize a Value.
@@ -30,18 +35,30 @@ class Value(Member):
             any value given by `default`.
 
         """
-        self.has_default = True
-        self._default = default
-        self._factory = factory
+        if factory is not None:
+            kind = (DEFAULT_FACTORY, factory)
+        else:
+            kind = (DEFAULT_VALUE, default)
+        self._default_kind = kind
 
-    def default(self, owner, name):
-        """ Get the default value for the member.
+    def clone(self):
+        """ Clone the value member.
+
+        This method will create a clone of the member using the default
+        constructor. It will copy over the default and validate kind to
+        the clone. Subclasses should reimplement as needed for more
+        control
+
+        Returns
+        -------
+        result : Value
+            A clone of the value member.
 
         """
-        factory = self._factory
-        if factory is not None:
-            return factory()
-        return self._default
+        clone = type(self)()
+        clone._default_kind = self._default_kind
+        clone._validate_kind = self._validate_kind
+        return clone
 
 
 class ReadOnly(Value):
@@ -52,12 +69,7 @@ class ReadOnly(Value):
 
     def __init__(self, default=None, factory=None):
         super(ReadOnly, self).__init__(default, factory)
-        self.has_validate = True
-
-    def validate(self, owner, name, old, new):
-        if old is not null:
-            raise RuntimeError("Cannot change a read-only value")
-        return new
+        self._validate_kind = (VALIDATE_READ_ONLY, None)
 
 
 class Constant(Value):
@@ -68,185 +80,120 @@ class Constant(Value):
 
     def __init__(self, default=None, factory=None):
         super(Constant, self).__init__(default, factory)
-        self.has_validate = True
-
-    def validate(self, owner, name, old, new):
-        raise RuntimeError("Cannot change a constant value")
+        self._validate_kind = (VALIDATE_CONSTANT, None)
 
 
-class Typed(Value):
-    """ A member class wich supports type validation.
-
-    """
-    __slots__ = ('_kind',)
-
-    def __init__(self, kind=None, default=None, factory=None):
-        """ Initialize a Typed member.
-
-        Parameters
-        ----------
-        kind : type, optional
-            The allowed type of values assigned to the member.
-
-        default : object, optional
-            The default value for the member.
-
-        factory : callable, optional
-            The default value factory for the member.
-
-        """
-        kind = kind or object
-        assert isinstance(kind, type), "Kind must be a type"
-        super(Typed, self).__init__(default, factory)
-        self.has_validate = True
-        self._kind = kind
-
-    def validate(self, owner, name, old, new):
-        """ Validate the value being assigned to the member.
-
-        If the value is not valid, a TypeError is raised.
-
-        Parameters
-        ----------
-        owner : Atom
-            The atom object which owns the value being modified.
-
-        name : str
-            The member name of the atom being modified.
-
-        old : object
-            The old value of the member.
-
-        new : object
-            The value being assigned to the member.
-
-        Returns
-        -------
-        result : object
-            The original value, provided it passes type validation.
-
-        """
-        if not isinstance(new, self._kind):
-            t = "The '%s' member on the `%s` object requires a value of type "
-            t += "`%s`. Got value of type `%s` instead."
-            owner_type = type(owner).__name__
-            kind_type = self._kind.__name__
-            value_type = type(new).__name__
-            raise TypeError(t % (name, owner_type, kind_type, value_type))
-        return new
-
-
-class Bool(Typed):
-    """ A typed member of type `bool`.
+class Bool(Value):
+    """ A value of type `bool`.
 
     """
     __slots__ = ()
 
-    def __init__(self, default=False):
-        assert isinstance(default, bool)
-        super(Bool, self).__init__(bool, default)
+    def __init__(self, default=False, factory=None):
+        super(Bool, self).__init__(default, factory)
+        self._validate_kind = (VALIDATE_BOOL, None)
 
 
-class Int(Typed):
-    """ A typed member of type `int`.
-
-    """
-    __slots__ = ()
-
-    def __init__(self, default=0):
-        assert isinstance(default, int)
-        super(Int, self).__init__(int, default)
-
-
-class Long(Typed):
-    """ A typed member of type `long`.
+class Int(Value):
+    """ A value of type `int`.
 
     """
     __slots__ = ()
 
-    def __init__(self, default=0L):
-        assert isinstance(default, long)
-        super(Long, self).__init__(long, default)
+    def __init__(self, default=0, factory=None):
+        super(Int, self).__init__(default, factory)
+        self._validate_kind = (VALIDATE_INT, None)
 
 
-class Float(Typed):
-    """ A typed member of type `float`.
-
-    """
-    __slots__ = ()
-
-    def __init__(self, default=0.0):
-        assert isinstance(default, float)
-        super(Float, self).__init__(float, default)
-
-
-class Str(Typed):
-    """ A typed member of type `str`.
+class Long(Value):
+    """ A value of type `long`.
 
     """
     __slots__ = ()
 
-    def __init__(self, default=''):
-        assert isinstance(default, str)
-        super(Str, self).__init__(str, default)
+    def __init__(self, default=0L, factory=None):
+        super(Long, self).__init__(default, factory)
+        self._validate_kind = (VALIDATE_LONG, None)
 
 
-class Unicode(Typed):
-    """ A typed member of type `unicode`.
-
-    Regular strings will be promoted to unicode strings.
+class Float(Value):
+    """ A value of type `float`.
 
     """
     __slots__ = ()
 
-    def __init__(self, default=u''):
-        assert isinstance(default, unicode)
-        super(Unicode, self).__init__(unicode, default)
+    def __init__(self, default=0.0, factory=None):
+        super(Float, self).__init__(default, factory)
+        self._validate_kind = (VALIDATE_FLOAT, None)
 
 
-class Tuple(Typed):
-    """ A typed member of type `tuple`.
+class Str(Value):
+    """ A value of type `str`.
 
     """
     __slots__ = ()
 
-    def __init__(self, default=()):
-        assert isinstance(default, tuple)
+    def __init__(self, default='', factory=None):
+        super(Str, self).__init__(default, factory)
+        self._validate_kind = (VALIDATE_STR, None)
+
+
+class Unicode(Value):
+    """ A value of type `unicode`.
+
+    """
+    __slots__ = ()
+
+    def __init__(self, default=u'', factory=None):
+        super(Unicode, self).__init__(default, factory)
+        self._validate_kind = (VALIDATE_UNICODE, None)
+
+
+class Tuple(Value):
+    """ A value of type `tuple`.
+
+    """
+    __slots__ = ()
+
+    def __init__(self, default=(), factory=None):
         super(Tuple, self).__init__(tuple, default)
+        self._validate_kind = (VALIDATE_TUPLE, None)
 
 
-class List(Typed):
-    """ A typed member of type `list`.
-
-    """
-    __slots__ = ()
-
-    def __init__(self, default=None):
-        if default is None:
-            factory = list
-        else:
-            assert isinstance(default, list)
-            factory = lambda: default[:]
-        super(List, self).__init__(list, factory=factory)
-
-
-class Dict(Typed):
-    """ A typed member of type `dict`.
+class List(Value):
+    """ A value of type `list`.
 
     """
     __slots__ = ()
 
-    def __init__(self, default=None):
-        if default is None:
-            factory = dict
-        else:
-            assert isinstance(default, dict)
-            factory = lambda: default.copy()
-        super(Dict, self).__init__(dict, factory=factory)
+    def __init__(self, default=None, factory=None):
+        if factory is None:
+            if default is None:
+                factory = list
+            else:
+                factory = lambda: default[:]
+        super(List, self).__init__(factory=factory)
+        self._validate_kind = (VALIDATE_LIST, None)
 
 
-class Instance(Typed):
-    """ A typed member which allows the value to be set to None.
+class Dict(Value):
+    """ A value of type `dict`.
+
+    """
+    __slots__ = ()
+
+    def __init__(self, default=None, factory=None):
+        if factory is None:
+            if default is None:
+                factory = dict
+            else:
+                factory = lambda: default.copy()
+        super(Dict, self).__init__(factory=factory)
+        self._validate_kind = (VALIDATE_DICT, None)
+
+
+class Instance(Member):
+    """ A value which allows the value to be set to None.
 
     """
     __slots__ = ()
@@ -258,55 +205,17 @@ class Instance(Typed):
 
 
 class Enum(Member):
-    """ A member where the value can be one of a provided set.
+    """ A member where the value can be one of a group of items.
 
     """
-    __slots__ = ('_default', '_items')
+    __slots__ = ()
 
-    def __init__(self, *items, **kwargs):
+    def __init__(self, *items):
         """ Initialize an Enum.
-
-        *items
-            The allowable items for the enum. There must be at least
-            one and they must all be hashable. These items are shared
-            amongst all Atom instances for class on which the Enum is
-            defined, so mutable enum items should be avoided.
-
-        **kwargs
-            Additional keyword arguments for the enum:
-
-                default : object
-                    The default value to use for the enum. If this is
-                    not given, the first of the given items is used.
 
         """
         if len(items) == 0:
             raise ValueError('an Enum requires at least 1 item')
-        self.has_default = True
-        self.has_validate = True
-        self._items = set(items)
-        if 'default' in kwargs:
-            default = kwargs['default']
-            if default not in self._items:
-                t = 'default `%s` is not a valid enum item'
-                raise ValueError(t % default)
-        else:
-            default = items[0]
-        self._default = default
-
-    def default(self, owner, name):
-        """ Get the default value for the enum.
-
-        """
-        return self._default
-
-    def validate(self, owner, name, old, new):
-        """ Validate the enum value.
-
-        """
-        if new is null:
-            return new
-        if new not in self._items:
-            raise ValueError('`%s` is not a valid enum item' % new)
-        return new
+        self._default_kind = (DEFAULT_VALUE, items[0])
+        self._validate_kind = (VALIDATE_ENUM, items)
 

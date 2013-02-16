@@ -22,6 +22,14 @@ namespace PythonHelpers
 | Exception Handling
 |----------------------------------------------------------------------------*/
 inline PyObject*
+py_bad_internal_call( const char* message )
+{
+    PyErr_SetString( PyExc_SystemError, message );
+    return 0;
+}
+
+
+inline PyObject*
 py_type_fail( const char* message )
 {
     PyErr_SetString( PyExc_TypeError, message );
@@ -37,6 +45,14 @@ py_expected_type_fail( PyObject* pyobj, const char* expected_type )
         "Expected object of type `%s`. Got object of type `%s` instead.",
         expected_type, pyobj->ob_type->tp_name
     );
+    return 0;
+}
+
+
+inline PyObject*
+py_value_fail( const char* message )
+{
+    PyErr_SetString( PyExc_ValueError, message );
     return 0;
 }
 
@@ -379,8 +395,6 @@ public:
     PyTuplePtr( const PyObjectPtr& objptr ) : PyObjectPtr( objptr ) {}
 
     PyTuplePtr( PyObject* pytuple ) : PyObjectPtr( pytuple ) {}
-
-    PyTuplePtr( Py_ssize_t size ) : PyObjectPtr( PyTuple_New( size ) ) {}
 
     bool check()
     {

@@ -2,37 +2,24 @@
 #  Copyright (c) 2013, Enthought, Inc.
 #  All rights reserved.
 #------------------------------------------------------------------------------
-from setuptools import setup, find_packages, Extension, Feature
+from setuptools import setup, find_packages, Extension
 
 
-atom_extensions = Feature(
-    description='optional optimized c++ extensions',
-    ext_modules=[
-        Extension(
-            'atom.extensions.catom',
-            ['atom/extensions/catom.cpp'],
-            language='c++',
-        ),
-        Extension(
-            'atom.extensions.observerpool',
-            ['atom/extensions/observerpool.cpp',
-            'atom/extensions/callbackhandler.cpp'],
-            language='c++',
-        ),
-        Extension(
-            'atom.extensions.eventbinder',
-            ['atom/extensions/eventbinder.cpp',
-             'atom/extensions/callbackhandler.cpp'],
-            language='c++',
-        ),
-        Extension(
-            'atom.extensions.signalbinder',
-            ['atom/extensions/signalbinder.cpp',
-             'atom/extensions/callbackhandler.cpp'],
-            language='c++',
-        ),
-    ],
-)
+ext_modules = [
+    Extension(
+        'atom.catom',
+        ['atom/src/catom.cpp',
+         'atom/src/member.cpp',
+         'atom/src/observerpool.cpp',
+         'atom/src/memberfunctions.cpp',
+         'atom/src/catommodule.cpp',
+         #'atom/src/signalbinder.cpp',
+         #'atom/src/eventbinder.cpp',
+         #'atom/src/callbackhandler.cpp'],
+         ],
+        language='c++',
+    ),
+]
 
 
 setup(
@@ -45,6 +32,6 @@ setup(
     long_description=open('README.md').read(),
     install_requires=['distribute'],
     packages=find_packages(),
-    features={'atom-extensions': atom_extensions}
+    ext_modules=ext_modules,
 )
 
