@@ -74,6 +74,30 @@ typedef struct {
 } Member;
 
 
+class StaticModifyGuard
+{
+
+public:
+
+    StaticModifyGuard( Member* member ) : m_member( member )
+    {
+        if( m_member && !m_member->modify_guard )
+            m_member->modify_guard = this;
+    }
+
+    ~StaticModifyGuard()
+    {
+        if( m_member && m_member->modify_guard == this )
+            m_member->modify_guard = 0;
+    }
+
+private:
+
+    Member* m_member;
+
+};
+
+
 PyObject*
 member_validate( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue  );
 

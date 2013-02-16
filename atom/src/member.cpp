@@ -541,30 +541,6 @@ make_change( PyObject* object, PyObject* name, PyObject* oldval, PyObject* newva
 }
 
 
-class StaticModifyGuard
-{
-
-public:
-
-    StaticModifyGuard( Member* member ) : m_member( member )
-    {
-        if( m_member && !m_member->modify_guard )
-            m_member->modify_guard = this;
-    }
-
-    ~StaticModifyGuard()
-    {
-        if( m_member && m_member->modify_guard == this )
-            m_member->modify_guard = 0;
-    }
-
-private:
-
-    Member* m_member;
-
-};
-
-
 static int
 Member__set__( PyObject* self, PyObject* owner, PyObject* value )
 {
@@ -605,7 +581,7 @@ Member__set__( PyObject* self, PyObject* owner, PyObject* value )
     if( get_atom_notify_bit( atom ) )
     {
         PyObjectPtr changeptr;
-        if( member->static_observers && member->static_observers->size() > 0 )
+        if( member->static_observers )
         {
             if( !oldptr )
                 oldptr.set( newref( _py_null ) );

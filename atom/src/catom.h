@@ -51,14 +51,17 @@ get_atom_count( CAtom* atom )
 
 
 int
-CAtom_Check( PyObject* object );
-
-
-int
 import_catom();
 
 
 extern PyTypeObject CAtom_Type;
+
+
+inline int
+CAtom_Check( PyObject* object )
+{
+    return PyObject_TypeCheck( object, &CAtom_Type );
+}
 
 
 }  // extern "C"
