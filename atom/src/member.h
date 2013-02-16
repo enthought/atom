@@ -13,7 +13,7 @@ using namespace PythonHelpers;
 extern "C" {
 
 
-enum MemberValidator
+enum ValidateKind
 {
     NoValidate,
     ValidateReadOnly,
@@ -29,29 +29,19 @@ enum MemberValidator
     ValidateDict,
     ValidateInstance,
     ValidateEnum,
+    ValidateOwnerMethod,
     UserValidate
 };
 
 
-enum MemberDefault
+enum DefaultKind
 {
     NoDefault,
     DefaultValue,
     DefaultFactory,
-    DefaultFactoryMethod,
+    DefaultOwnerMethod,
     UserDefault
 };
-
-
-struct _Member_struct;
-
-
-typedef PyObject*
-(*validate_func)( _Member_struct* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue );
-
-
-typedef PyObject*
-(*default_func)( _Member_struct* member, PyObject* owner );
 
 
 typedef struct {
@@ -68,22 +58,28 @@ typedef struct {
 } MemberChange;
 
 
-typedef struct _Member_struct {
+class StaticModifyGuard;
+
+
+typedef struct {
     PyObject_HEAD
     uint32_t index;
     PyObject* name;
-    MemberValidator f_validate_kind;
-    MemberDefault f_default_kind;
-    validate_func f_validate;
-    default_func f_default;
-    PyObject* f_validate_ctxt;
-    PyObject* f_default_ctxt;
-    std::vector<PyObjectPtr>* observers; // method names on the atom subclass
+    DefaultKind default_kind;
+    ValidateKind validate_kind;
+    PyObject* default_context;
+    PyObject* validate_context;
+    std::vector<PyObjectPtr>* static_observers; // method names on the atom subclass
+    StaticModifyGuard* modify_guard;
 } Member;
 
 
-int
-Member_Check( PyObject* member );
+PyObject*
+member_validate( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue  );
+
+
+PyObject*
+member_default( Member* member, PyObject* owner );
 
 
 int import_member();
@@ -96,6 +92,13 @@ extern PyTypeObject Member_Type;
 
 
 extern PyTypeObject MemberChange_Type;
+
+
+inline int
+Member_Check( PyObject* object )
+{
+    return PyObject_TypeCheck( object, &Member_Type );
+}
 
 
 }  // extern C

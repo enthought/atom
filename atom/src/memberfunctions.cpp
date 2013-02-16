@@ -2,7 +2,15 @@
 |  Copyright (c) 2013, Enthought, Inc.
 |  All rights reserved.
 |----------------------------------------------------------------------------*/
-#include "memberfunctions.h"
+#include "member.h"
+
+
+typedef PyObject*
+(*validate_func)( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue );
+
+
+typedef PyObject*
+(*default_func)( Member* member, PyObject* owner );
 
 
 static PyObject*
@@ -18,6 +26,13 @@ validate_type_fail( Member* member, PyObject* owner, PyObject* newvalue, const c
         newvalue->ob_type->tp_name
     );
     return 0;
+}
+
+
+static PyObject*
+no_validate( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
+{
+    return newref( newvalue );
 }
 
 
@@ -121,12 +136,29 @@ validate_dict( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* ne
 static PyObject*
 validate_enum( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
 {
-    int res = PySequence_Contains( member->f_validate_ctxt, newvalue );
+    int res = PySequence_Contains( member->validate_context, newvalue );
     if( res < 0 )
         return 0;
     if( res == 1 )
         return newref( newvalue );
     return py_value_fail( "invalid enum value" );
+}
+
+
+static PyObject*
+validate_owner_method( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
+{
+    if( !PyString_Check( member->validate_context ) )
+        return py_type_fail( "validate owner method name must be a string" );
+    PyObjectPtr callable( PyObject_GetAttr( owner, member->validate_context ) );
+    if( !callable )
+        return 0;
+    PyTuplePtr args( PyTuple_New( 2 ) );
+    if( !args )
+        return 0;
+    args.set_item( 0, newref( oldvalue ) );
+    args.set_item( 1, newref( newvalue ) );
+    return callable( args ).release();
 }
 
 
@@ -150,8 +182,9 @@ user_validate( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* ne
 }
 
 
-static validate_func validators[] = {
-    0,                    // no validate
+static validate_func
+validators[] = {
+    no_validate,
     validate_read_only,
     validate_constant,
     validate_bool,
@@ -163,25 +196,33 @@ static validate_func validators[] = {
     validate_tuple,
     validate_list,
     validate_dict,
-    0,
+    no_validate,   // validate instance
     validate_enum,
+    validate_owner_method,
     user_validate
 };
 
 
-validate_func
-get_validate_func( MemberValidator type )
+PyObject*
+member_validate( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
 {
-    if( type >= sizeof( validators ) )
-        return 0;
-    return validators[ type ];
+    if( member->validate_kind >= sizeof( validators ) )
+        return no_validate( member, owner, oldvalue, newvalue );
+    return validators[ member->validate_kind ]( member, owner, oldvalue, newvalue );
+}
+
+
+static PyObject*
+no_default( Member* member, PyObject* owner )
+{
+    return newref( _py_null );
 }
 
 
 static PyObject*
 default_value( Member* member, PyObject* owner )
 {
-    return newref( member->f_default_ctxt );
+    return newref( member->default_context );
 }
 
 
@@ -191,20 +232,20 @@ default_factory( Member* member, PyObject* owner )
     PyTuplePtr args( PyTuple_New( 0 ) );
     if( !args )
         return 0;
-    PyObjectPtr callable( newref( member->f_default_ctxt ) );
+    PyObjectPtr callable( newref( member->default_context ) );
     return callable( args ).release();
 }
 
 
 static PyObject*
-default_factory_method( Member* member, PyObject* owner )
+default_owner_method( Member* member, PyObject* owner )
 {
-    if( !PyString_Check( member->f_default_ctxt ) )
-        return py_type_fail( "default factory method name must be a string" );
-    PyObjectPtr callable( PyObject_GetAttr( owner, member->f_default_ctxt ) );
+    if( !PyString_Check( member->default_context ) )
+        return py_type_fail( "default owner method name must be a string" );
+    PyObjectPtr callable( PyObject_GetAttr( owner, member->default_context ) );
     if( !callable )
         return 0;
-    PyObjectPtr args( PyTuple_New( 0 ) );
+    PyTuplePtr args( PyTuple_New( 0 ) );
     if( !args )
         return 0;
     return callable( args ).release();
@@ -217,7 +258,8 @@ user_default( Member* member, PyObject* owner )
     static PyObject* dstr = 0;
     if( !dstr )
         dstr = PyString_FromString( "default" );
-    PyObjectPtr defaultptr( PyObject_GetAttr( reinterpret_cast<PyObject*>( member ), dstr ) );
+    PyObject* pymember = reinterpret_cast<PyObject*>( member );
+    PyObjectPtr defaultptr( PyObject_GetAttr( pymember, dstr ) );
     if( !defaultptr )
         return 0;
     PyTuplePtr args( PyTuple_New( 2 ) );
@@ -229,20 +271,21 @@ user_default( Member* member, PyObject* owner )
 }
 
 
-static default_func defaultors[] = {
-    0,                    // no default
+static default_func
+defaults[] = {
+    no_default,
     default_value,
     default_factory,
-    default_factory_method,
+    default_owner_method,
     user_default
 };
 
 
-default_func
-get_default_func( MemberDefault type )
+PyObject*
+member_default( Member* member, PyObject* owner )
 {
-    if( type >= sizeof( defaultors ) )
-        return 0;
-    return defaultors[ type ];
+    if( member->default_kind >= sizeof( defaults ) )
+        return no_default( member, owner );
+    return defaults[ member->default_kind ]( member, owner );
 }
 
