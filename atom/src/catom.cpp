@@ -269,11 +269,8 @@ CAtom_lookup_member( CAtom* self, PyObject* name )
     if( !member )
         Py_RETURN_NONE;
     if( !Member_Check( member.get() ) )
-    {
-        member.release();
         Py_RETURN_NONE;
-    }
-    return member.incref_release();
+    return member.release();
 }
 
 
@@ -344,7 +341,6 @@ observe_simple( CAtom* self, PyObject* name, PyObject* callback )
             self->observers = new ObserverPool();
         self->observers->add( topicptr, callbackptr );
     }
-    memberptr.release();
     Py_RETURN_NONE;
 }
 
@@ -370,7 +366,6 @@ unobserve_simple( CAtom* self, PyObject* name, PyObject* callback )
         PyObjectPtr callbackptr( newref( callback ) );
         self->observers->remove( topicptr, callbackptr );
     }
-    memberptr.release();
     Py_RETURN_NONE;
 }
 
@@ -502,6 +497,59 @@ CAtom_unobserve( CAtom* self, PyObject* args, PyObject* kwargs )
 
 
 static PyObject*
+CAtom_notify( CAtom* self, PyObject* args )
+{
+    PyObject* name;
+    PyObject* argument;
+    if( !PyArg_ParseTuple( args, "SO", &name, &argument ) )
+        return 0;
+    if( !get_atom_notify_bit( self ) )
+        Py_RETURN_NONE;
+    PyObject* type = reinterpret_cast<PyObject*>( self->ob_type );
+    PyDictPtr members(
+        PyObject_GetAttr( reinterpret_cast<PyObject*>( type ), _atom_members )
+    );
+    if( !members )
+        return 0;
+    if( !members.check_exact() )
+        return py_bad_internal_call( "atom members" );
+    PyObjectPtr memberptr( members.get_item( name ) );
+    if( memberptr && Member_Check( memberptr.get() ) )
+    {
+        PyTuplePtr argsptr( PyTuple_New( 1 ) );
+        if( !argsptr )
+            return 0;
+        argsptr.initialize(0, newref( argument ) );
+        PyObjectPtr kwargsptr( 0 );
+        Member* member = reinterpret_cast<Member*>( memberptr.get() );
+        if( member->static_observers )
+        {
+            PyObjectPtr ownerptr( newref( reinterpret_cast<PyObject*>( self ) ) );
+            StaticModifyGuard guard( member );
+            std::vector<PyObjectPtr>::iterator it;
+            std::vector<PyObjectPtr>::iterator end = member->static_observers->end();
+            for( it = member->static_observers->begin(); it != end; ++it )
+            {
+                PyObjectPtr method( ownerptr.get_attr( *it ) );
+                if( !method )
+                    return 0;
+                if( !method( argsptr ) )
+                    return 0;
+            }
+        }
+        if( self->observers )
+        {
+            PyObjectPtr nameptr( newref( member->name ) );
+            if( self->observers->notify( nameptr, argsptr, kwargsptr ) < 0 )
+                return 0;
+        }
+    }
+    Py_RETURN_NONE;
+}
+
+
+
+static PyObject*
 CAtom_sizeof( CAtom* self, PyObject* args )
 {
     Py_ssize_t size = self->ob_type->tp_basicsize;
@@ -527,6 +575,8 @@ CAtom_methods[] = {
       "Register an observer callback to observe changes on the given member(s)." },
     { "unobserve", ( PyCFunction )CAtom_unobserve, METH_VARARGS | METH_KEYWORDS,
       "Unregister an observer callback for the given member(s)." },
+    { "notify", ( PyCFunction )CAtom_notify, METH_VARARGS,
+      "Call the registered observers for the given name with the given argument" },
     { "__sizeof__", ( PyCFunction )CAtom_sizeof, METH_NOARGS,
       "__sizeof__() -> size of object in memory, in bytes" },
     { 0 } // sentinel
@@ -582,13 +632,6 @@ PyTypeObject CAtom_Type = {
     0,                                      /* tp_weaklist */
     (destructor)0                           /* tp_del */
 };
-
-
-int
-CAtom_Check( PyObject* object )
-{
-    return PyObject_TypeCheck( object, &CAtom_Type );
-}
 
 
 int
