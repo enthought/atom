@@ -47,10 +47,11 @@ initcatom( void )
     PyModule_AddIntConstant( mod, "VALIDATE_DICT", ValidateDict );
     PyModule_AddIntConstant( mod, "VALIDATE_INSTANCE", ValidateInstance );
     PyModule_AddIntConstant( mod, "VALIDATE_ENUM", ValidateEnum );
+    PyModule_AddIntConstant( mod, "VALIDATE_OWNER_METHOD", ValidateOwnerMethod );
     PyModule_AddIntConstant( mod, "USER_VALIDATE", UserValidate );
     PyModule_AddIntConstant( mod, "DEFAULT_VALUE", DefaultValue );
     PyModule_AddIntConstant( mod, "DEFAULT_FACTORY", DefaultFactory );
-    PyModule_AddIntConstant( mod, "DEFAULT_FACTORY_METHOD", DefaultFactoryMethod );
+    PyModule_AddIntConstant( mod, "DEFAULT_OWNER_METHOD", DefaultOwnerMethod );
     PyModule_AddIntConstant( mod, "USER_DEFAULT", UserDefault );
 }
 
