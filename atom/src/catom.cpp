@@ -497,7 +497,7 @@ CAtom_unobserve( CAtom* self, PyObject* args, PyObject* kwargs )
 
 
 static PyObject*
-CAtom_notify( CAtom* self, PyObject* args )
+CAtom_notify_observers( CAtom* self, PyObject* args )
 {
     PyObject* name;
     PyObject* argument;
@@ -520,7 +520,6 @@ CAtom_notify( CAtom* self, PyObject* args )
         if( !argsptr )
             return 0;
         argsptr.initialize(0, newref( argument ) );
-        PyObjectPtr kwargsptr( 0 );
         Member* member = reinterpret_cast<Member*>( memberptr.get() );
         if( member->static_observers )
         {
@@ -539,6 +538,7 @@ CAtom_notify( CAtom* self, PyObject* args )
         }
         if( self->observers )
         {
+            PyObjectPtr kwargsptr( 0 );
             PyObjectPtr nameptr( newref( member->name ) );
             if( self->observers->notify( nameptr, argsptr, kwargsptr ) < 0 )
                 return 0;
@@ -546,7 +546,6 @@ CAtom_notify( CAtom* self, PyObject* args )
     }
     Py_RETURN_NONE;
 }
-
 
 
 static PyObject*
@@ -575,7 +574,7 @@ CAtom_methods[] = {
       "Register an observer callback to observe changes on the given member(s)." },
     { "unobserve", ( PyCFunction )CAtom_unobserve, METH_VARARGS | METH_KEYWORDS,
       "Unregister an observer callback for the given member(s)." },
-    { "notify", ( PyCFunction )CAtom_notify, METH_VARARGS,
+    { "notify_observers", ( PyCFunction )CAtom_notify_observers, METH_VARARGS,
       "Call the registered observers for the given name with the given argument" },
     { "__sizeof__", ( PyCFunction )CAtom_sizeof, METH_NOARGS,
       "__sizeof__() -> size of object in memory, in bytes" },
