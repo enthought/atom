@@ -9,8 +9,9 @@
 
 extern "C" {
 
-
-static PyObject* _undefined;
+#define FREELIST_MAX 128
+static int numfree = 0;
+static MemberChange* freelist[ FREELIST_MAX ];
 
 
 static PyObject*
@@ -82,15 +83,7 @@ MemberChange_new( PyTypeObject* type, PyObject* args, PyObject* kwargs )
     if( !PyArg_ParseTupleAndKeywords(
         args, kwargs, "OOOO", kwds, &object, &name, &oldvalue, &newvalue ) )
         return 0;
-    PyObject* self = PyType_GenericNew( type, args, kwargs );
-    if( !self )
-        return 0;
-    MemberChange* change = reinterpret_cast<MemberChange*>( self );
-    change->object = newref( object );
-    change->name = newref( name );
-    change->oldvalue = newref( oldvalue );
-    change->newvalue = newref( newvalue );
-    return self;
+    return MemberChange_New( object, name, oldvalue, newvalue );
 }
 
 
@@ -120,7 +113,10 @@ MemberChange_dealloc( MemberChange* self )
 {
     PyObject_GC_UnTrack( self );
     MemberChange_clear( self );
-    self->ob_type->tp_free( reinterpret_cast<PyObject*>( self ) );
+    if( numfree < FREELIST_MAX )
+        freelist[ numfree++ ] = self;
+    else
+        self->ob_type->tp_free( reinterpret_cast<PyObject*>( self ) );
 }
 
 
@@ -267,6 +263,30 @@ PyTypeObject MemberChange_Type = {
 };
 
 
+PyObject*
+MemberChange_New( PyObject* object, PyObject* name, PyObject* oldvalue, PyObject* newvalue )
+{
+    PyObject* pychange;
+    if( numfree > 0 )
+    {
+        PyObject* pychange = reinterpret_cast<PyObject*>( freelist[ --numfree ] );
+        _Py_NewReference( pychange );
+    }
+    else
+    {
+        pychange = PyType_GenericAlloc( &MemberChange_Type, 0 );
+        if( !pychange )
+            return 0;
+    }
+    MemberChange* change = reinterpret_cast<MemberChange*>( pychange );
+    change->object = newref( object );
+    change->name = newref( name );
+    change->oldvalue = newref( oldvalue );
+    change->newvalue = newref( newvalue );
+    return pychange;
+}
+
+
 static PyObject*
 Member_new( PyTypeObject* type, PyObject* args, PyObject* kwargs )
 {
@@ -274,7 +294,6 @@ Member_new( PyTypeObject* type, PyObject* args, PyObject* kwargs )
     if( !selfptr )
         return 0;
     Member* member = reinterpret_cast<Member*>( selfptr.get() );
-    member->index = 0;
     member->name = newref( _undefined );
     return selfptr.release();
 }
@@ -526,21 +545,6 @@ Member__get__( PyObject* self, PyObject* owner, PyObject* type )
 }
 
 
-static PyObject*
-make_change( PyObject* object, PyObject* name, PyObject* oldval, PyObject* newval )
-{
-    PyObject* pychange = PyType_GenericNew( &MemberChange_Type, 0, 0 );
-    if( !pychange )
-        return 0;
-    MemberChange* change = reinterpret_cast<MemberChange*>( pychange );
-    change->object = newref( object );
-    change->name = newref( name );
-    change->oldvalue = newref( oldval );
-    change->newvalue = newref( newval );
-    return pychange;
-}
-
-
 static int
 Member__set__( PyObject* self, PyObject* owner, PyObject* value )
 {
@@ -589,7 +593,7 @@ Member__set__( PyObject* self, PyObject* owner, PyObject* value )
                 newptr.set( newref( _py_null ) );
             if( oldptr == newptr || oldptr.richcompare( newptr, Py_EQ ) )
                 return 0;
-            changeptr.set( make_change( owner, member->name, oldptr.get(), newptr.get() ) );
+            changeptr.set( MemberChange_New( owner, member->name, oldptr.get(), newptr.get() ) );
             if( !changeptr )
                 return -1;
             PyTuplePtr argsptr( PyTuple_New( 1 ) );
@@ -622,7 +626,7 @@ Member__set__( PyObject* self, PyObject* owner, PyObject* value )
                         newptr.set( newref( _py_null ) );
                     if( oldptr == newptr || oldptr.richcompare( newptr, Py_EQ ) )
                         return 0;
-                    changeptr.set( make_change( owner, member->name, oldptr.get(), newptr.get() ) );
+                    changeptr.set( MemberChange_New( owner, member->name, oldptr.get(), newptr.get() ) );
                     if( !changeptr )
                         return -1;
                 }
@@ -703,7 +707,7 @@ Member_get_default_kind( Member* self, void* ctxt )
         return 0;
     tuple.set_item( 0, PyInt_FromLong( self->default_kind ) );
     PyObject* context = self->default_context;
-    tuple.set_item( 1, newref( context ? context : Py_None ) );
+    tuple.set_item( 1, newref( context ? context : _py_null ) );
     return tuple.release();
 }
 
@@ -757,7 +761,7 @@ Member_get_validate_kind( Member* self, void* ctxt )
         return 0;
     tuple.set_item( 0, PyInt_FromLong( self->validate_kind ) );
     PyObject* context = self->validate_context;
-    tuple.set_item( 1, newref( context ? context : Py_None ) );
+    tuple.set_item( 1, newref( context ? context : _py_null ) );
     return tuple.release();
 }
 
@@ -895,7 +899,40 @@ PyTypeObject Member_Type = {
 };
 
 
+int
+notify_observers( Member* member, CAtom* atom, PyObjectPtr& args, PyObjectPtr& kwargs )
+{
+    if( !get_atom_notify_bit( atom ) )
+        return 0;
+    if( member->static_observers )
+    {
+        PyObjectPtr ownerptr( newref( reinterpret_cast<PyObject*>( atom ) ) );
+        StaticModifyGuard guard( member );
+        std::vector<PyObjectPtr>::iterator it;
+        std::vector<PyObjectPtr>::iterator end = member->static_observers->end();
+        for( it = member->static_observers->begin(); it != end; ++it )
+        {
+            PyObjectPtr method( ownerptr.get_attr( *it ) );
+            if( !method )
+                return -1;
+            if( !method( args, kwargs ) )
+                return -1;
+        }
+    }
+    if( atom->observers )
+    {
+        PyObjectPtr name( newref( member->name ) );
+        if( atom->observers->notify( name, args, kwargs ) < 0 )
+            return -1;
+    }
+    return 0;
+}
+
+
 PyObject* _py_null;
+
+
+PyObject* _undefined;
 
 
 int import_member()

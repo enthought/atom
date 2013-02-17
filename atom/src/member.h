@@ -5,6 +5,7 @@
 #pragma once
 #include <vector>
 #include "pythonhelpers.h"
+#include "catom.h"
 
 
 using namespace PythonHelpers;
@@ -99,6 +100,10 @@ private:
 
 
 PyObject*
+MemberChange_New( PyObject* object, PyObject* name, PyObject* oldval, PyObject* newval );
+
+
+PyObject*
 member_validate( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue  );
 
 
@@ -106,10 +111,17 @@ PyObject*
 member_default( Member* member, PyObject* owner );
 
 
+int
+notify_observers( Member* member, CAtom* atom, PyObjectPtr& args, PyObjectPtr& kwargs );
+
+
 int import_member();
 
 
 extern PyObject* _py_null;
+
+
+extern PyObject* _undefined;
 
 
 extern PyTypeObject Member_Type;
