@@ -4,6 +4,8 @@
 |----------------------------------------------------------------------------*/
 #include "catom.h"
 #include "member.h"
+#include "event.h"
+#include "signal.h"
 
 
 extern "C" {
@@ -25,12 +27,20 @@ initcatom( void )
         return;
     if( import_catom() < 0 )
         return;
+    if( import_event() < 0 )
+        return;
+    if( import_signal() < 0 )
+        return;
     Py_INCREF( &MemberChange_Type );
     Py_INCREF( &Member_Type );
     Py_INCREF( &CAtom_Type );
+    Py_INCREF( &Event_Type );
+    Py_INCREF( &Signal_Type );
     Py_INCREF( _py_null );
     PyModule_AddObject( mod, "MemberChange", reinterpret_cast<PyObject*>( &MemberChange_Type ) );
     PyModule_AddObject( mod, "Member", reinterpret_cast<PyObject*>( &Member_Type ) );
+    PyModule_AddObject( mod, "Event", reinterpret_cast<PyObject*>( &Event_Type ) );
+    PyModule_AddObject( mod, "Signal", reinterpret_cast<PyObject*>( &Signal_Type ) );
     PyModule_AddObject( mod, "CAtom", reinterpret_cast<PyObject*>( &CAtom_Type ) );
     PyModule_AddObject( mod, "null", _py_null );
     PyModule_AddIntConstant( mod, "NO_VALIDATE", NoValidate );
