@@ -529,17 +529,17 @@ Member__get__( PyObject* self, PyObject* owner, PyObject* type )
     Member* member = reinterpret_cast<Member*>( self );
     if( member->index >= get_atom_count( atom ) )
         return py_no_attr_fail( owner, PyString_AsString( member->name ) );
-    PyObjectPtr value( atom->data[ member->index ] );
+    PyObjectPtr value( atom->data[ member->index ] );  // borrow ref
     if( value )
-        return value.incref_release();
+        return value.incref_release();                 // take owned ref
     if( member->default_kind )
     {
-        value = member_default( member, owner );
+        value = member_default( member, owner );       // value is 0 before assignment
         if( !value )
             return 0;
         if( value != _py_null )
-            atom->data[ member->index ] = value.newref();
-        return value.release();
+            atom->data[ member->index ] = value.newref();  // take owned internal ref
+        return value.release();                            // return owned ref to caller
     }
     return newref( _py_null );
 }
@@ -560,15 +560,16 @@ Member__set__( PyObject* self, PyObject* owner, PyObject* value )
         py_no_attr_fail( owner, PyString_AsString( member->name ) );
         return -1;
     }
-    PyObjectPtr oldptr( atom->data[ member->index ] );
-    PyObjectPtr newptr( value != _py_null ? value : 0 );
+    PyObjectPtr oldptr( atom->data[ member->index ] );    // borrow ref
+    PyObjectPtr newptr( value != _py_null ? value : 0 );  // borrow ref
     if( oldptr == newptr )
     {
-        oldptr.release();
-        newptr.release();
+        oldptr.release();  // return borrowed ref
+        newptr.release();  // return borrowed ref
         return 0;
     }
-    newptr.xincref();
+    oldptr.xincref();  // take owned ref
+    newptr.xincref();  // take owned ref
     if( member->validate_kind )
     {
         if( !oldptr )
@@ -581,7 +582,8 @@ Member__set__( PyObject* self, PyObject* owner, PyObject* value )
         if( newptr == _py_null )
             newptr.decref_release();
     }
-    atom->data[ member->index ] = newptr.xnewref();
+    Py_XDECREF( atom->data[ member->index] );        // release internally owned ref
+    atom->data[ member->index ] = newptr.xnewref();  // take internally owned ref
     if( get_atom_notify_bit( atom ) )
     {
         PyObjectPtr changeptr;
