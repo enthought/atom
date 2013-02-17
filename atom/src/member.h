@@ -29,6 +29,7 @@ enum ValidateKind
     ValidateList,
     ValidateDict,
     ValidateInstance,
+    ValidateTyped,
     ValidateEnum,
     ValidateOwnerMethod,
     UserValidate

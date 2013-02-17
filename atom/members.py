@@ -4,9 +4,9 @@
 #------------------------------------------------------------------------------
 from .catom import (
     Member, VALIDATE_READ_ONLY, VALIDATE_CONSTANT, VALIDATE_BOOL, VALIDATE_INT,
-    VALIDATE_LONG, VALIDATE_FLOAT, VALIDATE_STR, VALIDATE_UNICODE,
-    VALIDATE_TUPLE, VALIDATE_LIST, VALIDATE_DICT, VALIDATE_ENUM, DEFAULT_VALUE,
-    DEFAULT_FACTORY
+    VALIDATE_LONG, VALIDATE_FLOAT, VALIDATE_LIST, VALIDATE_DICT, VALIDATE_ENUM,
+    VALIDATE_TUPLE, VALIDATE_STR, VALIDATE_UNICODE, VALIDATE_INSTANCE,
+    VALIDATE_TYPED, USER_VALIDATE, DEFAULT_VALUE, DEFAULT_FACTORY
 )
 
 
@@ -174,15 +174,85 @@ class Dict(Value):
 
 
 class Instance(Member):
-    """ A value which allows the value to be set to None.
+    """ A value which allows objects of a given type or types.
+
+    Values will be tested using the C api `PyObject_IsInstance` call,
+    which is equivalent to the expression `isinstance(value, kind)`.
+    Thus, the given kind should be a class or a tuple of classes. The
+    value may also be set to None.
 
     """
     __slots__ = ()
 
+    def __init__(self, kind, factory=None):
+        if factory is not None:
+            self.default_kind = (DEFAULT_FACTORY, factory)
+        else:
+            self.default_kind = (DEFAULT_VALUE, None)
+        self.validate_kind = (VALIDATE_INSTANCE, kind)
+
+
+class ForwardInstance(Instance):
+    """ An Instance subclass which delays resolving the definition.
+
+    """
+    __slots__ = '_resolve'
+
+    def __init__(self, resolve, factory=None):
+        if factory is not None:
+            self.default_kind = (DEFAULT_FACTORY, factory)
+        else:
+            self.default_kind = (DEFAULT_VALUE, None)
+        self.validate_kind = (USER_VALIDATE, None)
+        self._resolve = resolve
+
     def validate(self, owner, name, old, new):
-        if new is None:
-            return new
-        return super(Instance, self).validate(owner, name, old, new)
+        kind = self._resolve()
+        if not isinstance(new, kind):
+            raise TypeError('invalid instance type')
+        self.validate_kind = (VALIDATE_INSTANCE, kind)
+        return new
+
+
+class Typed(Member):
+    """ A value which allows objects of a given type.
+
+    Values will be tested using the C api `PyObject_TypeCheck`. This is
+    akin to the expression `issubclass(type(value), cls.mro())`. It is
+    less flexible but faster than Instance. The kind must be a type. A
+    tuple of types is not acceptable. The value may be set to None.
+
+    """
+    __slots__ = ()
+
+    def __init__(self, kind, factory=None):
+        if factory is not None:
+            self.default_kind = (DEFAULT_FACTORY, factory)
+        else:
+            self.default_kind = (DEFAULT_VALUE, None)
+        self.validate_kind = (VALIDATE_TYPED, kind)
+
+
+class ForwardTyped(Typed):
+    """ A Typed subclass which delays resolving the definition.
+
+    """
+    __slots__ = '_resolve'
+
+    def __init__(self, resolve, factory=None):
+        if factory is not None:
+            self.default_kind = (DEFAULT_FACTORY, factory)
+        else:
+            self.default_kind = (DEFAULT_VALUE, None)
+        self.validate_kind = (USER_VALIDATE, None)
+        self._resolve = resolve
+
+    def validate(self, owner, name, old, new):
+        kind = self._resolve()
+        if not isinstance(new, kind):
+            raise TypeError('invalid value type')
+        self.validate_kind = (VALIDATE_TYPED, kind)
+        return new
 
 
 class Enum(Member):

@@ -148,6 +148,20 @@ validate_instance( Member* member, PyObject* owner, PyObject* oldvalue, PyObject
 
 
 static PyObject*
+validate_typed( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
+{
+    if( newvalue == Py_None )
+        return newref( newvalue );
+    if( !PyType_Check( member->validate_context ) )
+        return py_type_fail( "validator context is not a type" );
+    PyTypeObject* type = reinterpret_cast<PyTypeObject*>( member->validate_context );
+    if( PyObject_TypeCheck( newvalue, type ) )
+        return newref( newvalue );
+    return validate_type_fail( member, owner, newvalue, type->tp_name );
+}
+
+
+static PyObject*
 validate_enum( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
 {
     int res = PySequence_Contains( member->validate_context, newvalue );
@@ -211,6 +225,7 @@ validators[] = {
     validate_list,
     validate_dict,
     validate_instance,
+    validate_typed,
     validate_enum,
     validate_owner_method,
     user_validate
