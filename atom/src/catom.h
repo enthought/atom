@@ -1,5 +1,5 @@
 /*-----------------------------------------------------------------------------
-|  Copyright (c) 2012, Enthought, Inc.
+|  Copyright (c) 2013, Enthought, Inc.
 |  All rights reserved.
 |----------------------------------------------------------------------------*/
 #pragma once
@@ -48,6 +48,16 @@ get_atom_count( CAtom* atom )
 {
     return atom->count & MEMBER_COUNT_MASK;
 }
+
+
+// 'name' should be the name string on the member for best performance
+int
+observe_fast( CAtom* atom,  PyObject* name, PyObject* callback );
+
+
+// 'name' should be the name string on the member for best performance
+int
+unobserve_fast( CAtom* atom,  PyObject* name, PyObject* callback );
 
 
 int

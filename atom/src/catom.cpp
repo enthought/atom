@@ -1,5 +1,5 @@
 /*-----------------------------------------------------------------------------
-|  Copyright (c) 2012, Enthought, Inc.
+|  Copyright (c) 2013, Enthought, Inc.
 |  All rights reserved.
 |----------------------------------------------------------------------------*/
 #pragma clang diagnostic ignored "-Wdeprecated-writable-strings"
@@ -119,7 +119,7 @@ PyNumberMethods MethodWrapper_as_number = {
 PyTypeObject MethodWrapper_Type = {
     PyObject_HEAD_INIT( &PyType_Type )
     0,                                      /* ob_size */
-    "catom.MethodWrapper",                  /* tp_name */
+    "MethodWrapper",                        /* tp_name */
     sizeof( MethodWrapper ),                /* tp_basicsize */
     0,                                      /* tp_itemsize */
     (destructor)MethodWrapper_dealloc,      /* tp_dealloc */
@@ -316,6 +316,32 @@ wrap_callback( PyObject* callback )
 }
 
 
+int
+observe_fast( CAtom* atom, PyObject* name, PyObject* callback )
+{
+    PyObjectPtr topicptr( newref( name ) );
+    PyObjectPtr callbackptr( wrap_callback( callback ) );
+    if( !callbackptr )
+        return -1;
+    if( !atom->observers )
+        atom->observers = new ObserverPool();
+    atom->observers->add( topicptr, callbackptr );
+    return 0;
+}
+
+
+int
+unobserve_fast( CAtom* atom, PyObject* name, PyObject* callback )
+{
+    if( !atom->observers )
+        return 0;
+    PyObjectPtr topicptr( newref( name ) );
+    PyObjectPtr callbackptr( newref( callback ) );
+    atom->observers->remove( topicptr, callbackptr );
+    return 0;
+}
+
+
 static PyObject*
 observe_simple( CAtom* self, PyObject* name, PyObject* callback )
 {
@@ -497,14 +523,13 @@ CAtom_unobserve( CAtom* self, PyObject* args, PyObject* kwargs )
 
 
 static PyObject*
-CAtom_notify_observers( CAtom* self, PyObject* args )
+CAtom_notify_observers( CAtom* self, PyObject* args, PyObject* kwargs )
 {
-    PyObject* name;
-    PyObject* argument;
-    if( !PyArg_ParseTuple( args, "SO", &name, &argument ) )
-        return 0;
-    if( !get_atom_notify_bit( self ) )
-        Py_RETURN_NONE;
+    if( PyTuple_GET_SIZE( args ) < 1 )
+        return py_type_fail( "notify_observers() requires at least 1 argument" );
+    PyObjectPtr nameptr( newref( PyTuple_GET_ITEM( args, 0 ) ) );
+    if( !PyString_Check( nameptr.get() ) )
+        return py_expected_type_fail( nameptr.get(), "str" );
     PyObject* type = reinterpret_cast<PyObject*>( self->ob_type );
     PyDictPtr members(
         PyObject_GetAttr( reinterpret_cast<PyObject*>( type ), _atom_members )
@@ -512,37 +537,20 @@ CAtom_notify_observers( CAtom* self, PyObject* args )
     if( !members )
         return 0;
     if( !members.check_exact() )
-        return py_bad_internal_call( "atom members" );
-    PyObjectPtr memberptr( members.get_item( name ) );
+    {
+        py_bad_internal_call( "atom members" );
+        return 0;
+    }
+    PyObjectPtr memberptr( members.get_item( nameptr ) );
     if( memberptr && Member_Check( memberptr.get() ) )
     {
-        PyTuplePtr argsptr( PyTuple_New( 1 ) );
+        Member* member = reinterpret_cast<Member*>( memberptr.get() );
+        PyObjectPtr argsptr( PyTuple_GetSlice( args, 1, PyTuple_GET_SIZE( args ) ) );
         if( !argsptr )
             return 0;
-        argsptr.initialize(0, newref( argument ) );
-        Member* member = reinterpret_cast<Member*>( memberptr.get() );
-        if( member->static_observers )
-        {
-            PyObjectPtr ownerptr( newref( reinterpret_cast<PyObject*>( self ) ) );
-            StaticModifyGuard guard( member );
-            std::vector<PyObjectPtr>::iterator it;
-            std::vector<PyObjectPtr>::iterator end = member->static_observers->end();
-            for( it = member->static_observers->begin(); it != end; ++it )
-            {
-                PyObjectPtr method( ownerptr.get_attr( *it ) );
-                if( !method )
-                    return 0;
-                if( !method( argsptr ) )
-                    return 0;
-            }
-        }
-        if( self->observers )
-        {
-            PyObjectPtr kwargsptr( 0 );
-            PyObjectPtr nameptr( newref( member->name ) );
-            if( self->observers->notify( nameptr, argsptr, kwargsptr ) < 0 )
-                return 0;
-        }
+        PyObjectPtr kwargsptr( xnewref( kwargs ) );
+        if( notify_observers( member, self, argsptr, kwargsptr ) < 0 )
+            return 0;
     }
     Py_RETURN_NONE;
 }
@@ -574,7 +582,7 @@ CAtom_methods[] = {
       "Register an observer callback to observe changes on the given member(s)." },
     { "unobserve", ( PyCFunction )CAtom_unobserve, METH_VARARGS | METH_KEYWORDS,
       "Unregister an observer callback for the given member(s)." },
-    { "notify_observers", ( PyCFunction )CAtom_notify_observers, METH_VARARGS,
+    { "notify_observers", ( PyCFunction )CAtom_notify_observers, METH_VARARGS | METH_KEYWORDS,
       "Call the registered observers for the given name with the given argument" },
     { "__sizeof__", ( PyCFunction )CAtom_sizeof, METH_NOARGS,
       "__sizeof__() -> size of object in memory, in bytes" },
