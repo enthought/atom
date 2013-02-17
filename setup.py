@@ -13,10 +13,8 @@ ext_modules = [
          'atom/src/observerpool.cpp',
          'atom/src/memberfunctions.cpp',
          'atom/src/catommodule.cpp',
-         #'atom/src/signalbinder.cpp',
-         #'atom/src/eventbinder.cpp',
-         #'atom/src/callbackhandler.cpp'],
-         ],
+         'atom/src/signal.cpp',
+         'atom/src/event.cpp'],
         language='c++',
     ),
 ]
