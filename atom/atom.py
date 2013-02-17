@@ -6,32 +6,7 @@ from contextlib import contextmanager
 import re
 from types import FunctionType
 
-from .catom import CAtom, Member
-
-
-def _clone_member(member):
-    """ Make a clone of a member.
-
-    This method will attempt to find a `clone` method on the member. In
-    its absence, it will invoke the default constructor. No C++ data is
-    copied from the old member to the new member.
-
-    Parameters
-    ----------
-    member : Member
-        The member to clone.
-
-    Returns
-    -------
-    result : Member
-        The cloned member.
-
-    """
-    if hasattr(member, 'clone'):
-        clone = member.clone()
-    else:
-        clone = type(member)()
-    return clone
+from .catom import CAtom, Member, DEFAULT_OWNER_METHOD, VALIDATE_OWNER_METHOD
 
 
 class observe(object):
@@ -95,7 +70,9 @@ class AtomMeta(type):
 
         # Pass over the class dict once and collect the static observers.
         # The decorated versions swap the functions back into the dict.
-        mangled = []
+        statics = []
+        defaults = []
+        validates = []
         decorated = []
         dec_seen = set()
         for key, value in dct.iteritems():
@@ -109,7 +86,11 @@ class AtomMeta(type):
                 value = value.func
                 dct[key] = value
             if key.startswith('_observe_') and isinstance(value, FunctionType):
-                mangled.append(key)
+                statics.append(key)
+            elif key.startswith('_default_') and isinstance(value, FunctionType):
+                defaults.append(key)
+            elif key.startswith('_validate_') and isinstance(value, FunctionType):
+                validates.append(key)
 
         # Create the class object.
         cls = type.__new__(meta, name, bases, dct)
@@ -123,50 +104,76 @@ class AtomMeta(type):
                 members.update(base.__atom_members__)
 
         # Walk the dict a second time to collect the class members. This
-        # assings the name and the index to the member. If a member is
+        # assigns the name and the index to the member. If a member is
         # overriding an existing member, the index of the old member is
-        # reused and any static observers are copied over.
+        # reused and any static observers are copied over. A set of the
+        # members defined on this class is computed so that the static
+        # behaviors can be applied properly below.
         these_members = set()
         for key, value in dct.iteritems():
             if isinstance(value, Member):
                 if value in these_members:
                     raise TypeError('cannot bind member to multiple names')
                 these_members.add(value)
-                value._name = key
+                value.__member_name__ = key
                 if key in members:
                     supermember = members[key]
                     members[key] = value
-                    value._index = supermember._index
+                    value.__member_index__ = supermember.__member_index__
                     value.copy_static_observers(supermember)
                 else:
-                    value._index = len(members)
+                    value.__member_index__ = len(members)
                     members[key] = value
 
-        # Add the mangled name static observers. If the matching member
-        # is defined on a sublass, it must be cloned as to not effect
-        # subclass instances.
-        for mangled_name in mangled:
+        # Add the special statically defined behaviors for the members.
+        # If the target member is defined on a subclass, it is clones
+        # so that the behavior of the subclass is not modified.
+
+        # Default value methods
+        for mangled_name in defaults:
             target = mangled_name[9:]
             if target in members:
                 member = members[target]
                 if member not in these_members:
-                    clone = _clone_member(member)
-                    clone.copy_static_observers(member)
-                    member = members[target] = clone
+                    member = member.clone()
+                    members[target] = member
+                    these_members.add(member)
+                    setattr(cls, target, member)
+                member.default_kind = (DEFAULT_OWNER_METHOD, mangled_name)
+
+        # Validate methods
+        for mangled_name in validates:
+            target = mangled_name[10:]
+            if target in members:
+                member = members[target]
+                if member not in these_members:
+                    member = member.clone()
+                    members[target] = member
+                    these_members.add(member)
+                    setattr(cls, target, member)
+                member.validate_kind = (VALIDATE_OWNER_METHOD, mangled_name)
+
+        # Static observers
+        for mangled_name in statics:
+            target = mangled_name[9:]
+            if target in members:
+                member = members[target]
+                if member not in these_members:
+                    member = member.clone()
+                    members[target] = member
+                    these_members.add(member)
                     setattr(cls, target, member)
                 member.add_static_observer(mangled_name)
 
-        # Add the decorated static observers. If the matching member
-        # is defined on a sublass, it must be cloned as to not effect
-        # subclass instances.
+        # Decorated observers
         for ob in decorated:
             if not ob.regex:
                 if ob.name in members:
                     member = members[ob.name]
                     if member not in these_members:
-                        clone = _clone_member(member)
-                        clone.copy_static_observers(member)
-                        member = members[ob.name] = clone
+                        member = member.clone()
+                        members[ob.name] = member
+                        these_members.add(member)
                         setattr(cls, ob.name, member)
                     member.add_static_observer(ob.func_name)
             else:
@@ -174,9 +181,9 @@ class AtomMeta(type):
                 for key, member in members.iteritems():
                     if rgx.match(key):
                         if member not in these_members:
-                            clone = _clone_member(member)
-                            clone.copy_static_observers(member)
-                            member = members[key] = clone
+                            member = member.clone()
+                            members[key] = member
+                            these_members.add(member)
                             setattr(cls, key, member)
                         member.add_static_observer(ob.func_name)
 

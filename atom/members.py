@@ -39,26 +39,7 @@ class Value(Member):
             kind = (DEFAULT_FACTORY, factory)
         else:
             kind = (DEFAULT_VALUE, default)
-        self._default_kind = kind
-
-    def clone(self):
-        """ Clone the value member.
-
-        This method will create a clone of the member using the default
-        constructor. It will copy over the default and validate kind to
-        the clone. Subclasses should reimplement as needed for more
-        control
-
-        Returns
-        -------
-        result : Value
-            A clone of the value member.
-
-        """
-        clone = type(self)()
-        clone._default_kind = self._default_kind
-        clone._validate_kind = self._validate_kind
-        return clone
+        self.default_kind = kind
 
 
 class ReadOnly(Value):
@@ -69,7 +50,7 @@ class ReadOnly(Value):
 
     def __init__(self, default=None, factory=None):
         super(ReadOnly, self).__init__(default, factory)
-        self._validate_kind = (VALIDATE_READ_ONLY, None)
+        self.validate_kind = (VALIDATE_READ_ONLY, None)
 
 
 class Constant(Value):
@@ -80,7 +61,7 @@ class Constant(Value):
 
     def __init__(self, default=None, factory=None):
         super(Constant, self).__init__(default, factory)
-        self._validate_kind = (VALIDATE_CONSTANT, None)
+        self.validate_kind = (VALIDATE_CONSTANT, None)
 
 
 class Bool(Value):
@@ -91,7 +72,7 @@ class Bool(Value):
 
     def __init__(self, default=False, factory=None):
         super(Bool, self).__init__(default, factory)
-        self._validate_kind = (VALIDATE_BOOL, None)
+        self.validate_kind = (VALIDATE_BOOL, None)
 
 
 class Int(Value):
@@ -102,7 +83,7 @@ class Int(Value):
 
     def __init__(self, default=0, factory=None):
         super(Int, self).__init__(default, factory)
-        self._validate_kind = (VALIDATE_INT, None)
+        self.validate_kind = (VALIDATE_INT, None)
 
 
 class Long(Value):
@@ -113,7 +94,7 @@ class Long(Value):
 
     def __init__(self, default=0L, factory=None):
         super(Long, self).__init__(default, factory)
-        self._validate_kind = (VALIDATE_LONG, None)
+        self.validate_kind = (VALIDATE_LONG, None)
 
 
 class Float(Value):
@@ -124,7 +105,7 @@ class Float(Value):
 
     def __init__(self, default=0.0, factory=None):
         super(Float, self).__init__(default, factory)
-        self._validate_kind = (VALIDATE_FLOAT, None)
+        self.validate_kind = (VALIDATE_FLOAT, None)
 
 
 class Str(Value):
@@ -135,7 +116,7 @@ class Str(Value):
 
     def __init__(self, default='', factory=None):
         super(Str, self).__init__(default, factory)
-        self._validate_kind = (VALIDATE_STR, None)
+        self.validate_kind = (VALIDATE_STR, None)
 
 
 class Unicode(Value):
@@ -146,7 +127,7 @@ class Unicode(Value):
 
     def __init__(self, default=u'', factory=None):
         super(Unicode, self).__init__(default, factory)
-        self._validate_kind = (VALIDATE_UNICODE, None)
+        self.validate_kind = (VALIDATE_UNICODE, None)
 
 
 class Tuple(Value):
@@ -157,7 +138,7 @@ class Tuple(Value):
 
     def __init__(self, default=(), factory=None):
         super(Tuple, self).__init__(tuple, default)
-        self._validate_kind = (VALIDATE_TUPLE, None)
+        self.validate_kind = (VALIDATE_TUPLE, None)
 
 
 class List(Value):
@@ -173,7 +154,7 @@ class List(Value):
             else:
                 factory = lambda: default[:]
         super(List, self).__init__(factory=factory)
-        self._validate_kind = (VALIDATE_LIST, None)
+        self.validate_kind = (VALIDATE_LIST, None)
 
 
 class Dict(Value):
@@ -189,7 +170,7 @@ class Dict(Value):
             else:
                 factory = lambda: default.copy()
         super(Dict, self).__init__(factory=factory)
-        self._validate_kind = (VALIDATE_DICT, None)
+        self.validate_kind = (VALIDATE_DICT, None)
 
 
 class Instance(Member):
@@ -216,6 +197,6 @@ class Enum(Member):
         """
         if len(items) == 0:
             raise ValueError('an Enum requires at least 1 item')
-        self._default_kind = (DEFAULT_VALUE, items[0])
-        self._validate_kind = (VALIDATE_ENUM, items)
+        self.default_kind = (DEFAULT_VALUE, items[0])
+        self.validate_kind = (VALIDATE_ENUM, items)
 
