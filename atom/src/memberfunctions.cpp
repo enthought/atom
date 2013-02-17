@@ -134,6 +134,20 @@ validate_dict( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* ne
 
 
 static PyObject*
+validate_instance( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
+{
+    if( newvalue == Py_None )
+        return newref( newvalue );
+    int res = PyObject_IsInstance( newvalue, member->validate_context );
+    if( res < 0 )
+        return 0;
+    if( res == 1 )
+        return newref( newvalue );
+    return py_type_fail( "invalid instance type" );
+}
+
+
+static PyObject*
 validate_enum( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
 {
     int res = PySequence_Contains( member->validate_context, newvalue );
@@ -196,7 +210,7 @@ validators[] = {
     validate_tuple,
     validate_list,
     validate_dict,
-    no_validate,   // validate instance
+    validate_instance,
     validate_enum,
     validate_owner_method,
     user_validate
