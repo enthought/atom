@@ -688,11 +688,10 @@ Member_set_member_name( Member* self, PyObject* value )
         py_expected_type_fail( value, "string" );
         return 0;
     }
-    if( !PyString_CHECK_INTERNED( value ) )
-        PyString_InternInPlace( &value );
+    Py_INCREF( value ); // incref before interning or segfault!!!
+    PyString_InternInPlace( &value );
     PyObject* old = self->name;
     self->name = value;
-    Py_INCREF( value );
     Py_DECREF( old );
     Py_RETURN_NONE;
 }
