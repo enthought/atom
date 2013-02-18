@@ -52,12 +52,14 @@ initcatom( void )
     PyModule_AddIntConstant( mod, "VALIDATE_FLOAT", ValidateFloat );
     PyModule_AddIntConstant( mod, "VALIDATE_STR", ValidateStr );
     PyModule_AddIntConstant( mod, "VALIDATE_UNICODE", ValidateUnicode );
+    PyModule_AddIntConstant( mod, "VALIDATE_UNICODE_PROMOTE", ValidateUnicodePromote );
     PyModule_AddIntConstant( mod, "VALIDATE_TUPLE", ValidateTuple );
     PyModule_AddIntConstant( mod, "VALIDATE_LIST", ValidateList );
     PyModule_AddIntConstant( mod, "VALIDATE_DICT", ValidateDict );
     PyModule_AddIntConstant( mod, "VALIDATE_INSTANCE", ValidateInstance );
     PyModule_AddIntConstant( mod, "VALIDATE_TYPED", ValidateTyped );
     PyModule_AddIntConstant( mod, "VALIDATE_ENUM", ValidateEnum );
+    PyModule_AddIntConstant( mod, "VALIDATE_CALLABLE", ValidateCallable );
     PyModule_AddIntConstant( mod, "VALIDATE_OWNER_METHOD", ValidateOwnerMethod );
     PyModule_AddIntConstant( mod, "USER_VALIDATE", UserValidate );
     PyModule_AddIntConstant( mod, "DEFAULT_VALUE", DefaultValue );
