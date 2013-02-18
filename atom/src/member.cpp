@@ -467,6 +467,33 @@ Member_remove_static_observer( Member* self, PyObject* name )
 
 
 static PyObject*
+Member_do_default( Member* self, PyObject* owner )
+{
+    if( !CAtom_Check( owner ) )
+        return py_expected_type_fail( owner, "CAtom" );
+    if( self->default_kind )
+        return member_default( self, owner );
+    return newref( _py_null );
+}
+
+
+static PyObject*
+Member_do_validate( Member* self, PyObject* args )
+{
+    if( PyTuple_GET_SIZE( args ) != 3 )
+        return py_type_fail( "do_validate() takes 3 arguments" );
+    PyObject* owner = PyTuple_GET_ITEM( args, 0 );
+    PyObject* oldvalue = PyTuple_GET_ITEM( args, 1 );
+    PyObject* newvalue = PyTuple_GET_ITEM( args, 2 );
+    if( !CAtom_Check( owner ) )
+        return py_expected_type_fail( owner, "CAtom" );
+    if( self->validate_kind )
+        return member_validate( self, owner, oldvalue, newvalue );
+    return newref( newvalue );
+}
+
+
+static PyObject*
 Member_default( Member* self, PyObject* args )
 {
     // reimplement in a subclass for Python-land user defaults.
@@ -653,14 +680,13 @@ Member_get_name( Member* self, void* context )
 }
 
 
-static int
-Member_set_name( Member* self, PyObject* value, void* context )
+static PyObject*
+Member_set_member_name( Member* self, PyObject* value )
 {
-    value = value ? value : _undefined;
     if( !PyString_CheckExact( value ) )
     {
         py_expected_type_fail( value, "string" );
-        return -1;
+        return 0;
     }
     if( !PyString_CHECK_INTERNED( value ) )
         PyString_InternInPlace( &value );
@@ -668,7 +694,7 @@ Member_set_name( Member* self, PyObject* value, void* context )
     self->name = value;
     Py_INCREF( value );
     Py_DECREF( old );
-    return 0;
+    Py_RETURN_NONE;
 }
 
 
@@ -679,24 +705,19 @@ Member_get_index( Member* self, void* context )
 }
 
 
-static int
-Member_set_index( Member* self, PyObject* value, void* context )
+static PyObject*
+Member_set_member_index( Member* self, PyObject* value )
 {
-    if( !value )
-    {
-        self->index = 0;
-        return 0;
-    }
     if( !PyInt_Check( value ) )
     {
         py_expected_type_fail( value, "int" );
-        return -1;
+        return 0;
     }
     Py_ssize_t index = PyInt_AsSsize_t( value );
     if( index < 0 && PyErr_Occurred() )
-        return -1;
+        return 0;
     self->index = static_cast<uint32_t>( index < 0 ? 0 : index );
-    return 0;
+    Py_RETURN_NONE;
 }
 
 
@@ -812,12 +833,8 @@ static PyGetSetDef
 Member_getset[] = {
     { "name", ( getter )Member_get_name, 0,
       "Get the name to which the member is bound." },
-    { "__member_name__", ( getter )Member_get_name, ( setter )Member_set_name,
-      "Get and set the name to which the member is bound. Use with extreme caution!" },
     { "index", ( getter )Member_get_index, 0,
       "Get the index to which the member is bound" },
-    { "__member_index__", ( getter )Member_get_index, ( setter )Member_set_index,
-      "Get and set the index to which the member is bound. Use with extreme caution!" },
     { "default_kind", ( getter )Member_get_default_kind, ( setter )Member_set_default_kind,
       "Get and set the default kind for the member." },
     { "validate_kind", ( getter )Member_get_validate_kind, ( setter )Member_set_validate_kind,
@@ -840,12 +857,20 @@ Member_methods[] = {
       "Add the name of a method to call on all atoms when the member changes." },
     { "remove_static_observer", ( PyCFunction )Member_remove_static_observer, METH_O,
       "Remove the name of a method to call on all atoms when the member changes." },
+    { "do_default", ( PyCFunction )Member_do_default, METH_O,
+      "Run the default value handler for member." },
+    { "do_validate", ( PyCFunction )Member_do_validate, METH_VARARGS,
+      "Run the validation handler for the member." },
     { "default", ( PyCFunction )Member_default, METH_VARARGS,
       "Compute the default value for the member." },
     { "validate", ( PyCFunction )Member_validate, METH_VARARGS,
       "Validate the value for the pending member change." },
     { "clone", ( PyCFunction )Member_clone, METH_NOARGS,
       "Create a clone of this member." },
+    { "_set_member_name", ( PyCFunction )Member_set_member_name, METH_O,
+      "Set the name to which the member is bound. Use with extreme caution!" },
+    { "_set_member_index", ( PyCFunction )Member_set_member_index, METH_O,
+      "Set the index to which the member is bound. Use with extreme caution!" },
     { 0 } // sentinel
 };
 
