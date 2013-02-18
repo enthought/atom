@@ -5,8 +5,9 @@
 from .catom import (
     Member, VALIDATE_READ_ONLY, VALIDATE_CONSTANT, VALIDATE_BOOL, VALIDATE_INT,
     VALIDATE_LONG, VALIDATE_FLOAT, VALIDATE_LIST, VALIDATE_DICT, VALIDATE_ENUM,
-    VALIDATE_TUPLE, VALIDATE_STR, VALIDATE_UNICODE, VALIDATE_INSTANCE,
-    VALIDATE_TYPED, USER_VALIDATE, DEFAULT_VALUE, DEFAULT_FACTORY
+    VALIDATE_TUPLE, VALIDATE_STR, VALIDATE_UNICODE_PROMOTE, VALIDATE_INSTANCE,
+    VALIDATE_TYPED, VALIDATE_CALLABLE, USER_VALIDATE, DEFAULT_VALUE,
+    DEFAULT_FACTORY, USER_DEFAULT, Event, null
 )
 
 
@@ -62,6 +63,17 @@ class Constant(Value):
     def __init__(self, default=None, factory=None):
         super(Constant, self).__init__(default, factory)
         self.validate_kind = (VALIDATE_CONSTANT, None)
+
+
+class Callable(Value):
+    """ A value which is callable.
+
+    """
+    __slots__ = ()
+
+    def __init__(self, default=None, factory=None):
+        super(Callable, self).__init__(default, factory)
+        self.validate_kind = (VALIDATE_CALLABLE, None)
 
 
 class Bool(Value):
@@ -127,7 +139,7 @@ class Unicode(Value):
 
     def __init__(self, default=u'', factory=None):
         super(Unicode, self).__init__(default, factory)
-        self.validate_kind = (VALIDATE_UNICODE, None)
+        self.validate_kind = (VALIDATE_UNICODE_PROMOTE, None)
 
 
 class Tuple(Value):
@@ -137,7 +149,7 @@ class Tuple(Value):
     __slots__ = ()
 
     def __init__(self, default=(), factory=None):
-        super(Tuple, self).__init__(tuple, default)
+        super(Tuple, self).__init__(default, factory)
         self.validate_kind = (VALIDATE_TUPLE, None)
 
 
@@ -184,8 +196,15 @@ class Instance(Member):
     """
     __slots__ = ()
 
-    def __init__(self, kind, factory=None):
+    def __init__(self, kind, factory=None, args=None, kwargs=None):
         if factory is not None:
+            self.default_kind = (DEFAULT_FACTORY, factory)
+        elif args is not None or kwargs is not None:
+            if kwargs is None:
+                kwargs = {}
+            if args is None:
+                args = ()
+            factory = lambda: kind(*args, **kwargs)
             self.default_kind = (DEFAULT_FACTORY, factory)
         else:
             self.default_kind = (DEFAULT_VALUE, None)
@@ -255,6 +274,31 @@ class ForwardTyped(Typed):
         return new
 
 
+class Coerced(Member):
+    """
+
+    """
+    __slots__ = ()
+
+    def __init__(self, kind, factory=None, coercer=None):
+        if factory is not None:
+            self.default_kind = (DEFAULT_FACTORY, factory)
+        else:
+            self.default_kind = (DEFAULT_VALUE, None)
+        self.validate_kind = (USER_VALIDATE, (kind, coercer))
+
+    def validate(self, owner, name, old, new):
+        kind, coercer = self.validate_kind[1]
+        if isinstance(new, kind):
+            return new
+        coercer = coercer or kind
+        try:
+            res = coercer(new)
+        except (TypeError, ValueError):
+            raise TypeError('could not coerce value to proper type')
+        return res
+
+
 class Enum(Member):
     """ A member where the value can be one of a group of items.
 
@@ -269,4 +313,71 @@ class Enum(Member):
             raise ValueError('an Enum requires at least 1 item')
         self.default_kind = (DEFAULT_VALUE, items[0])
         self.validate_kind = (VALIDATE_ENUM, items)
+
+    def add(self, *items):
+        """ Create a clone of the Enum with additional items.
+
+        """
+        olditems = self.validate_kind[1]
+        newitems = olditems + items
+        clone = self.clone()
+        clone.validate_kind = (VALIDATE_ENUM, newitems)
+        return clone
+
+    def remove(self, *items):
+        """ Create a clone of the Enum with some items removed.
+
+        """
+        olditems = self.validate_kind[1]
+        newitems = tuple(i for i in olditems if i not in items)
+        if len(newitems) == 0:
+            raise ValueError('an Enum requires at least 1 item')
+        clone = self.clone()
+        clone.default_kind = (DEFAULT_VALUE, newitems[0])
+        clone.validate_kind = (VALIDATE_ENUM, newitems)
+        return clone
+
+    def __call__(self, item):
+        """ Create a clone of the Enum item with a new default.
+
+        """
+        olditems = self.validate_kind[1]
+        if item not in olditems:
+            raise TypeError('invalid enum value')
+        clone = self.clone()
+        clone.default_kind = (DEFAULT_VALUE, item)
+        return clone
+
+
+class UserMember(Member):
+    """ A member which uses Python-land default value and validation.
+
+    """
+    __slots__ = ()
+
+    def __init__(self):
+        self.default_kind = (USER_DEFAULT, None)
+        self.validate_kind = (USER_VALIDATE, None)
+
+    def default(self, owner):
+        """ Reimplement in a subclass to compute the default value.
+
+        """
+        return null
+
+    def validate(self, owner, old, new):
+        """ Reimplement in a subclass to perform validation.
+
+        """
+        return new
+
+
+class TypedEvent(Event):
+    """ A typed event.
+
+    """
+    __slots__ = ()
+
+    def __init__(self, kind):
+        self.validate_kind = (VALIDATE_TYPED, kind)
 
