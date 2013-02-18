@@ -25,12 +25,14 @@ enum ValidateKind
     ValidateFloat,
     ValidateStr,
     ValidateUnicode,
+    ValidateUnicodePromote,
     ValidateTuple,
     ValidateList,
     ValidateDict,
     ValidateInstance,
     ValidateTyped,
     ValidateEnum,
+    ValidateCallable,
     ValidateOwnerMethod,
     UserValidate
 };

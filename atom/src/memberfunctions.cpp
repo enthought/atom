@@ -107,6 +107,17 @@ validate_unicode( Member* member, PyObject* owner, PyObject* oldvalue, PyObject*
 
 
 static PyObject*
+validate_unicode_promote( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
+{
+    if( PyUnicode_Check( newvalue ) )
+        return newref( newvalue );
+    if( PyString_Check( newvalue ) )
+        return PyUnicode_FromObject( newvalue );
+    return validate_type_fail( member, owner, newvalue, "unicode" );
+}
+
+
+static PyObject*
 validate_tuple( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
 {
     if( PyTuple_Check( newvalue ) )
@@ -127,7 +138,7 @@ validate_list( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* ne
 static PyObject*
 validate_dict( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
 {
-    if( PyLong_Check( newvalue ) )
+    if( PyDict_Check( newvalue ) )
         return newref( newvalue );
     return validate_type_fail( member, owner, newvalue, "dict" );
 }
@@ -170,6 +181,15 @@ validate_enum( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* ne
     if( res == 1 )
         return newref( newvalue );
     return py_value_fail( "invalid enum value" );
+}
+
+
+static PyObject*
+validate_callable( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
+{
+    if( PyCallable_Check( newvalue ) )
+        return newref( newvalue );
+    return validate_type_fail( member, owner, newvalue, "callable" );
 }
 
 
@@ -221,12 +241,14 @@ validators[] = {
     validate_float,
     validate_string,
     validate_unicode,
+    validate_unicode_promote,
     validate_tuple,
     validate_list,
     validate_dict,
     validate_instance,
     validate_typed,
     validate_enum,
+    validate_callable,
     validate_owner_method,
     user_validate
 };
