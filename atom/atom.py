@@ -103,26 +103,49 @@ class AtomMeta(type):
             if base is not CAtom and issubclass(base, CAtom):
                 members.update(base.__atom_members__)
 
+        # The set of members which belong to this class as opposed to
+        # a base class. This enables the code which sets up the static
+        # handlers to only clone when necessary.
+        owned_members = set()
+
+        # Resolve any conflicts with memory layout. Conflicts can occur
+        # with multiple inheritance where the indices of multiple base
+        # classes will overlap. When this happens, the members which
+        # conflict must be cloned in order to occupy a new index.
+        conflicts = []
+        occupied = set()
+        for member in members.itervalues():
+            if member.index in occupied:
+                conflicts.append(member)
+            else:
+                occupied.add(member.index)
+
+        resolved_index = len(occupied)
+        for member in conflicts:
+            clone = member.clone()
+            clone._set_member_index(resolved_index)
+            owned_members.add(clone)
+            members[clone.name] = clone
+            setattr(cls, clone.name, clone)
+            resolved_index += 1
+
         # Walk the dict a second time to collect the class members. This
         # assigns the name and the index to the member. If a member is
-        # overriding an existing member, the index of the old member is
-        # reused and any static observers are copied over. A set of the
-        # members defined on this class is computed so that the static
-        # behaviors can be applied properly below.
-        these_members = set()
+        # overriding an existing member, the memory index of the old
+        # member is reused and any static observers are copied over.
         for key, value in dct.iteritems():
             if isinstance(value, Member):
-                if value in these_members:
+                if value in owned_members:
                     raise TypeError('cannot bind member to multiple names')
-                these_members.add(value)
-                value.__member_name__ = key
+                owned_members.add(value)
+                value._set_member_name(key)
                 if key in members:
                     supermember = members[key]
                     members[key] = value
-                    value.__member_index__ = supermember.__member_index__
+                    value._set_member_index(supermember.index)
                     value.copy_static_observers(supermember)
                 else:
-                    value.__member_index__ = len(members)
+                    value._set_member_index(len(members))
                     members[key] = value
 
         # Add the special statically defined behaviors for the members.
@@ -134,10 +157,10 @@ class AtomMeta(type):
             target = mangled_name[9:]
             if target in members:
                 member = members[target]
-                if member not in these_members:
+                if member not in owned_members:
                     member = member.clone()
                     members[target] = member
-                    these_members.add(member)
+                    owned_members.add(member)
                     setattr(cls, target, member)
                 member.default_kind = (DEFAULT_OWNER_METHOD, mangled_name)
 
@@ -146,10 +169,10 @@ class AtomMeta(type):
             target = mangled_name[10:]
             if target in members:
                 member = members[target]
-                if member not in these_members:
+                if member not in owned_members:
                     member = member.clone()
                     members[target] = member
-                    these_members.add(member)
+                    owned_members.add(member)
                     setattr(cls, target, member)
                 member.validate_kind = (VALIDATE_OWNER_METHOD, mangled_name)
 
@@ -158,10 +181,10 @@ class AtomMeta(type):
             target = mangled_name[9:]
             if target in members:
                 member = members[target]
-                if member not in these_members:
+                if member not in owned_members:
                     member = member.clone()
                     members[target] = member
-                    these_members.add(member)
+                    owned_members.add(member)
                     setattr(cls, target, member)
                 member.add_static_observer(mangled_name)
 
@@ -170,20 +193,20 @@ class AtomMeta(type):
             if not ob.regex:
                 if ob.name in members:
                     member = members[ob.name]
-                    if member not in these_members:
+                    if member not in owned_members:
                         member = member.clone()
                         members[ob.name] = member
-                        these_members.add(member)
+                        owned_members.add(member)
                         setattr(cls, ob.name, member)
                     member.add_static_observer(ob.func_name)
             else:
                 rgx = re.compile(ob.name)
                 for key, member in members.iteritems():
                     if rgx.match(key):
-                        if member not in these_members:
+                        if member not in owned_members:
                             member = member.clone()
                             members[key] = member
-                            these_members.add(member)
+                            owned_members.add(member)
                             setattr(cls, key, member)
                         member.add_static_observer(ob.func_name)
 
