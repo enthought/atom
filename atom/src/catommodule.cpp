@@ -62,7 +62,10 @@ initcatom( void )
     PyModule_AddIntConstant( mod, "VALIDATE_CALLABLE", ValidateCallable );
     PyModule_AddIntConstant( mod, "VALIDATE_OWNER_METHOD", ValidateOwnerMethod );
     PyModule_AddIntConstant( mod, "USER_VALIDATE", UserValidate );
+    PyModule_AddIntConstant( mod, "NO_DEFAULT", NoDefault );
     PyModule_AddIntConstant( mod, "DEFAULT_VALUE", DefaultValue );
+    PyModule_AddIntConstant( mod, "DEFAULT_LIST", DefaultList );
+    PyModule_AddIntConstant( mod, "DEFAULT_DICT", DefaultDict );
     PyModule_AddIntConstant( mod, "DEFAULT_FACTORY", DefaultFactory );
     PyModule_AddIntConstant( mod, "DEFAULT_OWNER_METHOD", DefaultOwnerMethod );
     PyModule_AddIntConstant( mod, "USER_DEFAULT", UserDefault );

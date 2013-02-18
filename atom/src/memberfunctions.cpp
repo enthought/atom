@@ -129,9 +129,28 @@ validate_tuple( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* n
 static PyObject*
 validate_list( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
 {
-    if( PyList_Check( newvalue ) )
-        return newref( newvalue );
-    return validate_type_fail( member, owner, newvalue, "list" );
+    if( !PyList_Check( newvalue ) )
+        return validate_type_fail( member, owner, newvalue, "list" );
+    Py_ssize_t size = PyList_GET_SIZE( newvalue );
+    PyObjectPtr listcopy( PyList_GetSlice( newvalue, 0, size ) );
+    if( !listcopy )
+        return 0;
+    if( member->validate_context != Py_None )
+    {
+        if( !Member_Check( member->validate_context ) )
+            return py_bad_internal_call( "validate_list() context is not a Member" );
+        Member* item_member = reinterpret_cast<Member*>( member->validate_context );
+        for( Py_ssize_t i = 0; i < size; ++i )
+        {
+            PyObject* item = PyList_GET_ITEM( listcopy.get(), i );
+            PyObject* valid_item = member_validate( item_member, owner, _py_null, item );
+            if( !valid_item )
+                return 0;
+            if( valid_item != item )
+                PyList_SetItem( listcopy.get(), i, valid_item );
+        }
+    }
+    return listcopy.release();
 }
 
 
@@ -161,7 +180,7 @@ validate_instance( Member* member, PyObject* owner, PyObject* oldvalue, PyObject
 static PyObject*
 validate_typed( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue )
 {
-    if( newvalue == Py_None )
+    if( newvalue == _py_null )
         return newref( newvalue );
     if( !PyType_Check( member->validate_context ) )
         return py_type_fail( "validator context is not a type" );
@@ -278,6 +297,29 @@ default_value( Member* member, PyObject* owner )
 
 
 static PyObject*
+default_list( Member* member, PyObject* owner )
+{
+    if( member->default_context == Py_None )
+        return PyList_New( 0 );
+    if( !PyList_Check( member->default_context ) )
+        return py_type_fail( "expect a list as default context" );
+    Py_ssize_t size = PyList_GET_SIZE( member->default_context );
+    return PyList_GetSlice( member->default_context, 0, size );
+}
+
+
+static PyObject*
+default_dict( Member* member, PyObject* owner )
+{
+    if( member->default_context == Py_None )
+        return PyDict_New();
+    if( !PyDict_Check( member->default_context ) )
+        return py_type_fail( "expect a dict as default context" );
+    return PyDict_Copy( member->default_context );
+}
+
+
+static PyObject*
 default_factory( Member* member, PyObject* owner )
 {
     PyTuplePtr args( PyTuple_New( 0 ) );
@@ -326,6 +368,8 @@ static default_func
 defaults[] = {
     no_default,
     default_value,
+    default_list,
+    default_dict,
     default_factory,
     default_owner_method,
     user_default

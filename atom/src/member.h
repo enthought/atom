@@ -42,6 +42,8 @@ enum DefaultKind
 {
     NoDefault,
     DefaultValue,
+    DefaultList,
+    DefaultDict,
     DefaultFactory,
     DefaultOwnerMethod,
     UserDefault
