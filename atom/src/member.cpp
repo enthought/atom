@@ -522,6 +522,21 @@ Member_validate( Member* self, PyObject* args )
 
 
 static PyObject*
+Member_post_validate( Member* self, PyObject* args )
+{
+    // reimplement in a subclass for Python-land user post validation.
+    // This exists here purely for completeness.
+    PyObject* owner;
+    PyObject* name;
+    PyObject* oldvalue;
+    PyObject* newvalue;
+    if( !PyArg_ParseTuple( args, "OOOO", &owner, &name, &oldvalue, &newvalue) )
+        return 0;
+    return newref( newvalue );
+}
+
+
+static PyObject*
 Member_clone( Member* self )
 {
     // reimplement in a subclass if more control is needed.
@@ -606,6 +621,12 @@ Member__set__( PyObject* self, PyObject* owner, PyObject* value )
         newptr = member_validate( member, owner, oldptr.get(), newptr.get() );
         if( !newptr )
             return -1;
+        if( member->post_validate_kind )
+        {
+            newptr = member_post_validate( member, owner, oldptr.get(), newptr.get() );
+            if( !newptr )
+                return -1;
+        }
         if( newptr == _py_null )
             newptr.decref_release();
     }
@@ -734,30 +755,15 @@ Member_get_default_kind( Member* self, void* ctxt )
 }
 
 
-static int
-Member_set_default_kind( Member* self, PyObject* value, void* ctxt )
+static PyObject*
+Member_set_default_kind( Member* self, PyObject* args )
 {
-    if( !value )
-    {
-        self->default_kind = NoDefault;
-        Py_XDECREF( self->default_context );
-        self->default_context = 0;
-        return 0;
-    }
-    if( !PyTuple_Check( value ) )
-    {
-        py_expected_type_fail( value, "tuple" );
-        return -1;
-    }
     DefaultKind kind;
     PyObject* context;
-    if( !PyArg_ParseTuple( value, "lO", &kind, &context ) )
-        return -1;
+    if( !PyArg_ParseTuple( args, "lO", &kind, &context ) )
+        return 0;
     if( kind < NoDefault || kind > UserDefault )
-    {
-        py_value_fail( "invalid default kind" );
-        return -1;
-    }
+        return py_value_fail( "invalid default kind" );
     self->default_kind = kind;
     if( kind == NoDefault )
     {
@@ -770,7 +776,7 @@ Member_set_default_kind( Member* self, PyObject* value, void* ctxt )
         Py_XDECREF( self->default_context );
         self->default_context = context;
     }
-    return 0;
+    Py_RETURN_NONE;
 }
 
 
@@ -788,30 +794,15 @@ Member_get_validate_kind( Member* self, void* ctxt )
 }
 
 
-static int
-Member_set_validate_kind( Member* self, PyObject* value, void* ctxt )
+static PyObject*
+Member_set_validate_kind( Member* self, PyObject* args )
 {
-    if( !value )
-    {
-        self->validate_kind = NoValidate;
-        Py_XDECREF( self->validate_context );
-        self->validate_context = 0;
-        return 0;
-    }
-    if( !PyTuple_Check( value ) )
-    {
-        py_expected_type_fail( value, "tuple" );
-        return -1;
-    }
     ValidateKind kind;
     PyObject* context;
-    if( !PyArg_ParseTuple( value, "lO", &kind, &context ) )
-        return -1;
+    if( !PyArg_ParseTuple( args, "lO", &kind, &context ) )
+        return 0;
     if( kind < NoValidate || kind > UserValidate )
-    {
-        py_value_fail( "invalid validate kind" );
-        return -1;
-    }
+        return py_value_fail( "invalid validate kind" );
     self->validate_kind = kind;
     if( kind == NoValidate )
     {
@@ -824,7 +815,46 @@ Member_set_validate_kind( Member* self, PyObject* value, void* ctxt )
         Py_XDECREF( self->validate_context );
         self->validate_context = context;
     }
-    return 0;
+    Py_RETURN_NONE;
+}
+
+
+static PyObject*
+Member_get_post_validate_kind( Member* self, void* ctxt )
+{
+
+    PyTuplePtr tuple( PyTuple_New( 2 ) );
+    if( !tuple )
+        return 0;
+    tuple.set_item( 0, PyInt_FromLong( self->post_validate_kind ) );
+    PyObject* context = self->post_validate_context;
+    tuple.set_item( 1, newref( context ? context : _py_null ) );
+    return tuple.release();
+}
+
+
+static PyObject*
+Member_set_post_validate_kind( Member* self, PyObject* args )
+{
+    PostValidateKind kind;
+    PyObject* context;
+    if( !PyArg_ParseTuple( args, "lO", &kind, &context ) )
+        return 0;
+    if( kind < NoPostValidate || kind > UserPostValidate )
+        return py_value_fail( "invalid post validate kind" );
+    self->post_validate_kind = kind;
+    if( kind == NoPostValidate )
+    {
+        Py_XDECREF( self->post_validate_context );
+        self->post_validate_context = 0;
+    }
+    else
+    {
+        Py_INCREF( context );
+        Py_XDECREF( self->post_validate_context );
+        self->post_validate_context = context;
+    }
+    Py_RETURN_NONE;
 }
 
 
@@ -834,10 +864,12 @@ Member_getset[] = {
       "Get the name to which the member is bound." },
     { "index", ( getter )Member_get_index, 0,
       "Get the index to which the member is bound" },
-    { "default_kind", ( getter )Member_get_default_kind, ( setter )Member_set_default_kind,
-      "Get and set the default kind for the member." },
-    { "validate_kind", ( getter )Member_get_validate_kind, ( setter )Member_set_validate_kind,
-      "Get and set the validate kind for the member." },
+    { "default_kind", ( getter )Member_get_default_kind, 0,
+      "Get the default kind for the member." },
+    { "validate_kind", ( getter )Member_get_validate_kind, 0,
+      "Get the validate kind for the member." },
+    { "post_validate_kind", ( getter )Member_get_post_validate_kind, 0,
+      "Get the post validate kind for the member." },
     { 0 } // sentinel
 };
 
@@ -864,11 +896,19 @@ Member_methods[] = {
       "Compute the default value for the member." },
     { "validate", ( PyCFunction )Member_validate, METH_VARARGS,
       "Validate the value for the pending member change." },
+    { "post_validate", ( PyCFunction )Member_post_validate, METH_VARARGS,
+      "Perform post validation action for the member." },
     { "clone", ( PyCFunction )Member_clone, METH_NOARGS,
       "Create a clone of this member." },
-    { "_set_member_name", ( PyCFunction )Member_set_member_name, METH_O,
+    { "set_default_kind", ( PyCFunction )Member_set_default_kind, METH_VARARGS,
+      "Set the default kind for the member." },
+    { "set_validate_kind", ( PyCFunction )Member_set_validate_kind, METH_VARARGS,
+      "Set the validate kind for the member." },
+    { "set_post_validate_kind", ( PyCFunction )Member_set_post_validate_kind, METH_VARARGS,
+      "Set the post validate kind for the member." },
+    { "set_member_name", ( PyCFunction )Member_set_member_name, METH_O,
       "Set the name to which the member is bound. Use with extreme caution!" },
-    { "_set_member_index", ( PyCFunction )Member_set_member_index, METH_O,
+    { "set_member_index", ( PyCFunction )Member_set_member_index, METH_O,
       "Set the index to which the member is bound. Use with extreme caution!" },
     { 0 } // sentinel
 };

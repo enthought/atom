@@ -16,13 +16,15 @@ extern "C" {
 
 enum ValidateKind
 {
-    NoValidate,
+    NoValidate,                 // keep this first
     ValidateReadOnly,
     ValidateConstant,
     ValidateBool,
     ValidateInt,
     ValidateLong,
+    ValidateLongPromote,
     ValidateFloat,
+    ValidateFloatPromote,
     ValidateStr,
     ValidateUnicode,
     ValidateUnicodePromote,
@@ -33,20 +35,29 @@ enum ValidateKind
     ValidateTyped,
     ValidateEnum,
     ValidateCallable,
+    ValidateRange,
     ValidateOwnerMethod,
-    UserValidate
+    UserValidate                // keep this last
+};
+
+
+enum PostValidateKind
+{
+    NoPostValidate,             // keep this first
+    PostValidateOwnerMethod,
+    UserPostValidate            // keep this last
 };
 
 
 enum DefaultKind
 {
-    NoDefault,
+    NoDefault,                  // keep this first
     DefaultValue,
     DefaultList,
     DefaultDict,
     DefaultFactory,
     DefaultOwnerMethod,
-    UserDefault
+    UserDefault                 // keep this last
 };
 
 
@@ -73,8 +84,10 @@ typedef struct {
     PyObject* name;
     DefaultKind default_kind;
     ValidateKind validate_kind;
+    PostValidateKind post_validate_kind;
     PyObject* default_context;
     PyObject* validate_context;
+    PyObject* post_validate_context;
     std::vector<PyObjectPtr>* static_observers; // method names on the atom subclass
     StaticModifyGuard* modify_guard;
 } Member;
@@ -110,6 +123,10 @@ MemberChange_New( PyObject* object, PyObject* name, PyObject* oldval, PyObject* 
 
 PyObject*
 member_validate( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue  );
+
+
+PyObject*
+member_post_validate( Member* member, PyObject* owner, PyObject* oldvalue, PyObject* newvalue  );
 
 
 PyObject*

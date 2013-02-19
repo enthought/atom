@@ -49,7 +49,9 @@ initcatom( void )
     PyModule_AddIntConstant( mod, "VALIDATE_BOOL", ValidateBool );
     PyModule_AddIntConstant( mod, "VALIDATE_INT", ValidateInt );
     PyModule_AddIntConstant( mod, "VALIDATE_LONG", ValidateLong );
+    PyModule_AddIntConstant( mod, "VALIDATE_LONG_PROMOTE", ValidateLongPromote );
     PyModule_AddIntConstant( mod, "VALIDATE_FLOAT", ValidateFloat );
+    PyModule_AddIntConstant( mod, "VALIDATE_FLOAT_PROMOTE", ValidateFloatPromote );
     PyModule_AddIntConstant( mod, "VALIDATE_STR", ValidateStr );
     PyModule_AddIntConstant( mod, "VALIDATE_UNICODE", ValidateUnicode );
     PyModule_AddIntConstant( mod, "VALIDATE_UNICODE_PROMOTE", ValidateUnicodePromote );
@@ -60,8 +62,12 @@ initcatom( void )
     PyModule_AddIntConstant( mod, "VALIDATE_TYPED", ValidateTyped );
     PyModule_AddIntConstant( mod, "VALIDATE_ENUM", ValidateEnum );
     PyModule_AddIntConstant( mod, "VALIDATE_CALLABLE", ValidateCallable );
+    PyModule_AddIntConstant( mod, "VALIDATE_RANGE", ValidateRange );
     PyModule_AddIntConstant( mod, "VALIDATE_OWNER_METHOD", ValidateOwnerMethod );
     PyModule_AddIntConstant( mod, "USER_VALIDATE", UserValidate );
+    PyModule_AddIntConstant( mod, "NO_POST_VALIDATE", NoPostValidate );
+    PyModule_AddIntConstant( mod, "POST_VALIDATE_OWNER_METHOD", PostValidateOwnerMethod );
+    PyModule_AddIntConstant( mod, "USER_POST_VALIDATE", UserPostValidate );
     PyModule_AddIntConstant( mod, "NO_DEFAULT", NoDefault );
     PyModule_AddIntConstant( mod, "DEFAULT_VALUE", DefaultValue );
     PyModule_AddIntConstant( mod, "DEFAULT_LIST", DefaultList );
