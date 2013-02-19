@@ -7,7 +7,7 @@ import re
 from types import FunctionType
 
 from .catom import (
-    CAtom, Member, DEFAULT_OWNER_METHOD, VALIDATE_OWNER_METHOD,
+    CAtom, Member, DEFAULT_OWNER_METHOD, DEFAULT_VALUE, VALIDATE_OWNER_METHOD,
     POST_VALIDATE_OWNER_METHOD,
 )
 
@@ -23,6 +23,8 @@ class observe(object):
             print change
 
     """
+    __slots__ = ('name', 'regex', 'func', 'func_name')
+
     def __init__(self, name, regex=False):
         """ Initialize an observe decorator.
 
@@ -51,6 +53,17 @@ class observe(object):
         return self
 
 
+class set_default(object):
+    """ An object used to set the default value of a base class member.
+
+    """
+    __slots__ = ('value', 'name')
+
+    def __init__(self, value):
+        self.value = value
+        self.name = None  # storage for the metaclass
+
+
 class AtomMeta(type):
     """ The metaclass for classes derived from Atom.
 
@@ -77,9 +90,14 @@ class AtomMeta(type):
         defaults = []
         validates = []
         decorated = []
+        set_defaults = []
         post_validates = []
         dec_seen = set()
         for key, value in dct.iteritems():
+            if isinstance(value, set_default):
+                value.name = key
+                set_defaults.append(value)
+                continue
             if isinstance(value, observe):
                 if value in dec_seen:
                     msg = 'cannot bind `observe` to multiple names'
@@ -97,6 +115,10 @@ class AtomMeta(type):
                 validates.append(key)
             elif key.startswith('_post_validate_') and isinstance(value, FunctionType):
                 post_validates.append(key)
+
+        # Remove the set_default items before creating the class
+        for sd in set_defaults:
+            del dct[sd.name]
 
         # Create the class object.
         cls = type.__new__(meta, name, bases, dct)
@@ -134,6 +156,20 @@ class AtomMeta(type):
             members[clone.name] = clone
             setattr(cls, clone.name, clone)
             resolved_index += 1
+
+        # Walk the set_default handlers and clone the base class member
+        # with a new member with the appropriate default. Raise an error
+        # if the set_default does not point to a member.
+        for sd in set_defaults:
+            if sd.name not in members:
+                msg = "Invalid call to set_default(). '%s' is not a member "
+                msg += "on the '%s' class."
+                raise TypeError(msg  % (sd.name, name))
+            member = members[sd.name]
+            member = member.clone()
+            owned_members.add(member)
+            setattr(cls, sd.name, member)
+            member.set_default_kind(DEFAULT_VALUE, sd.value)
 
         # Walk the dict a second time to collect the class members. This
         # assigns the name and the index to the member. If a member is

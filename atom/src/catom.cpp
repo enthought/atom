@@ -3,6 +3,7 @@
 |  All rights reserved.
 |----------------------------------------------------------------------------*/
 #pragma clang diagnostic ignored "-Wdeprecated-writable-strings"
+#pragma GCC diagnostic ignored "-Wwrite-strings"
 #include "catom.h"
 #include "member.h"
 
@@ -523,6 +524,36 @@ CAtom_unobserve( CAtom* self, PyObject* args, PyObject* kwargs )
 
 
 static PyObject*
+CAtom_has_observers( CAtom* self, PyObject* name )
+{
+    if( !PyString_Check( name ) )
+        return py_expected_type_fail( name, "str" );
+    PyObject* type = reinterpret_cast<PyObject*>( self->ob_type );
+    PyDictPtr members(
+        PyObject_GetAttr( reinterpret_cast<PyObject*>( type ), _atom_members )
+    );
+    if( !members )
+        return 0;
+    if( !members.check_exact() )
+    {
+        py_bad_internal_call( "atom members" );
+        return 0;
+    }
+    PyObjectPtr nameptr( newref( name ) );
+    PyObjectPtr memberptr( members.get_item( nameptr ) );
+    if( memberptr && Member_Check( memberptr.get() ) )
+    {
+        Member* member = reinterpret_cast<Member*>( memberptr.get() );
+        if( member->static_observers && member->static_observers->size() > 0 )
+            Py_RETURN_TRUE;
+    }
+    if( self->observers && self->observers->has_topic( nameptr ) )
+        Py_RETURN_TRUE;
+    Py_RETURN_FALSE;
+}
+
+
+static PyObject*
 CAtom_notify_observers( CAtom* self, PyObject* args, PyObject* kwargs )
 {
     if( PyTuple_GET_SIZE( args ) < 1 )
@@ -582,6 +613,8 @@ CAtom_methods[] = {
       "Register an observer callback to observe changes on the given member(s)." },
     { "unobserve", ( PyCFunction )CAtom_unobserve, METH_VARARGS | METH_KEYWORDS,
       "Unregister an observer callback for the given member(s)." },
+    { "has_observers", ( PyCFunction )CAtom_has_observers, METH_O,
+      "Get whether the atom has observers for a given member name" },
     { "notify_observers", ( PyCFunction )CAtom_notify_observers, METH_VARARGS | METH_KEYWORDS,
       "Call the registered observers for the given name with the given argument" },
     { "__sizeof__", ( PyCFunction )CAtom_sizeof, METH_NOARGS,

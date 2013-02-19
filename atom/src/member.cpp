@@ -3,6 +3,7 @@
 |  All rights reserved.
 |----------------------------------------------------------------------------*/
 #pragma clang diagnostic ignored "-Wdeprecated-writable-strings"
+#pragma GCC diagnostic ignored "-Wwrite-strings"
 #include "catom.h"
 #include "member.h"
 
@@ -269,7 +270,7 @@ MemberChange_New( PyObject* object, PyObject* name, PyObject* oldvalue, PyObject
     PyObject* pychange;
     if( numfree > 0 )
     {
-        PyObject* pychange = reinterpret_cast<PyObject*>( freelist[ --numfree ] );
+        pychange = reinterpret_cast<PyObject*>( freelist[ --numfree ] );
         _Py_NewReference( pychange );
     }
     else

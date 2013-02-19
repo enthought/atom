@@ -47,7 +47,7 @@ class Dict(Member):
         self.set_default_kind(DEFAULT_DICT, default)
         self.set_validate_kind(VALIDATE_DICT, (key, value))
 
-    def _set_member_name(self, name):
+    def set_member_name(self, name):
         """ Assign the name to this member.
 
         This method is called by the Atom metaclass when a class is
@@ -55,14 +55,14 @@ class Dict(Member):
         also updated.
 
         """
-        super(Dict, self)._set_member_name(name)
+        super(Dict, self).set_member_name(name)
         key, value = self.validate_kind[1]
         if key is not None:
-            key._set_member_name(name + '|key')
+            key.set_member_name(name + '|key')
         if value is not None:
-            value._set_member_name(name + '|value')
+            value.set_member_name(name + '|value')
 
-    def _set_member_index(self, index):
+    def set_member_index(self, index):
         """ Assign the index to this member.
 
         This method is called by the Atom metaclass when a class is
@@ -70,12 +70,12 @@ class Dict(Member):
         also updated.
 
         """
-        super(Dict, self)._set_member_index(index)
+        super(Dict, self).set_member_index(index)
         key, value = self.validate_kind[1]
         if key is not None:
-            key._set_member_index(index)
+            key.set_member_index(index)
         if value is not None:
-            value._set_member_index(index)
+            value.set_member_index(index)
 
     def __get__(self, owner, cls):
         """ Get the dict object for the member.

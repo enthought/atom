@@ -155,7 +155,7 @@ EventBinder_New( CAtom* atom, Member* member )
     PyObject* pybinder;
     if( numfree > 0 )
     {
-        PyObject* pybinder = reinterpret_cast<PyObject*>( freelist[ --numfree ] );
+        pybinder = reinterpret_cast<PyObject*>( freelist[ --numfree ] );
         _Py_NewReference( pybinder );
     }
     else

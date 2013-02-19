@@ -3,6 +3,11 @@
 |  All rights reserved.
 |----------------------------------------------------------------------------*/
 #pragma once
+
+#ifdef __MINGW32__
+#include <stdint.h>
+#endif
+
 #include "pythonhelpers.h"
 #include "observerpool.h"
 
