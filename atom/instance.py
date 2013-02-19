@@ -45,15 +45,15 @@ class Instance(Member):
 
         """
         if factory is not None:
-            self.default_kind = (DEFAULT_FACTORY, factory)
+            self.set_default_kind(DEFAULT_FACTORY, factory)
         elif args is not None or kwargs is not None:
             args = args or ()
             kwargs = kwargs or {}
             factory = lambda: kind(*args, **kwargs)
-            self.default_kind = (DEFAULT_FACTORY, factory)
+            self.set_default_kind(DEFAULT_FACTORY, factory)
         else:
-            self.default_kind = (DEFAULT_VALUE, None)
-        self.validate_kind = (VALIDATE_INSTANCE, kind)
+            self.set_default_kind(DEFAULT_VALUE, None)
+        self.set_validate_kind(VALIDATE_INSTANCE, kind)
 
 
 class ForwardInstance(Instance):
@@ -90,14 +90,14 @@ class ForwardInstance(Instance):
 
         """
         if factory is not None:
-            self.default_kind = (DEFAULT_FACTORY, factory)
+            self.set_default_kind(DEFAULT_FACTORY, factory)
         elif args is not None or kwargs is not None:
             args = args or ()
             kwargs = kwargs or {}
-            self.default_kind = (USER_DEFAULT, (args, kwargs))
+            self.set_default_kind(USER_DEFAULT, (args, kwargs))
         else:
-            self.default_kind = (DEFAULT_VALUE, None)
-        self.validate_kind = (USER_VALIDATE, resolve)
+            self.set_default_kind(DEFAULT_VALUE, None)
+        self.set_validate_kind(USER_VALIDATE, resolve)
 
     def default(self, owner, name):
         """ Called to retrieve the default value.
@@ -111,8 +111,8 @@ class ForwardInstance(Instance):
         kind = resolve()
         args, kwargs = self.default_kind[1]
         value = kind(*args, **kwargs)
-        self.default_kind = (DEFAULT_FACTORY, lambda: kind(*args, **kwargs))
-        self.validate_kind = (VALIDATE_INSTANCE, kind)
+        self.set_default_kind(DEFAULT_FACTORY, lambda: kind(*args, **kwargs))
+        self.set_validate_kind(VALIDATE_INSTANCE, kind)
         return value
 
     def validate(self, owner, name, old, new):
@@ -127,10 +127,10 @@ class ForwardInstance(Instance):
         kind = resolve()
         if not isinstance(new, kind):
             raise TypeError('invalid instance type')
-        self.validate_kind = (VALIDATE_INSTANCE, kind)
+        self.set_validate_kind(VALIDATE_INSTANCE, kind)
         if self.default_kind[0] == USER_DEFAULT:
             args, kwargs = self.default_kind[1]
             factory = lambda: kind(*args, **kwargs)
-            self.default_kind = (DEFAULT_FACTORY, factory)
+            self.set_default_kind(DEFAULT_FACTORY, factory)
         return new
 

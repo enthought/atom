@@ -20,5 +20,5 @@ class TypedEvent(Event):
             The type of argument which may be emitted by the event.
 
         """
-        self.validate_kind = (VALIDATE_TYPED, kind)
+        self.set_validate_kind(VALIDATE_TYPED, kind)
 

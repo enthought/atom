@@ -16,13 +16,13 @@ class List(Member):
     """
     __slots__ = '_member'
 
-    def __init__(self, kind=None, default=None):
+    def __init__(self, item=None, default=None):
         """ Initialize a List.
 
         Parameters
         ----------
-        kind : Member, type, or tuple of types, optional
-            A member to use for validating the types of item allowed in
+        item : Member, type, or tuple of types, optional
+            A member to use for validating the types of items allowed in
             the list. This can also be a type object or a tuple of types,
             in which case it will be wrapped with an Instance member. If
             this is not given, no item validation is performed.
@@ -32,16 +32,16 @@ class List(Member):
             created for each atom instance.
 
         """
-        if kind is not None:
-            if not isinstance(kind, Member):
-                if isinstance(kind, type):
-                    kind = Instance(kind)
+        if item is not None:
+            if not isinstance(item, Member):
+                if isinstance(item, type):
+                    item = Instance(item)
                 else:
-                    raise TypeError('bad List kind')
+                    raise TypeError('bad List item')
         if default is not None:
-            assert isinstance(default, list), "default must be a list"
-        self.default_kind = (DEFAULT_LIST, default)
-        self.validate_kind = (VALIDATE_LIST, kind)
+            assert isinstance(default, list), 'default must be a list'
+        self.set_default_kind(DEFAULT_LIST, default)
+        self.set_validate_kind(VALIDATE_LIST, item)
 
     def _set_member_name(self, name):
         """ Assign the name to this member.
@@ -54,7 +54,7 @@ class List(Member):
         super(List, self)._set_member_name(name)
         member = self.validate_kind[1]
         if member is not None:
-            member._set_member_name(name + "[]")
+            member._set_member_name(name + "|item")
 
     def _set_member_index(self, index):
         """ Assign the index to this member.
@@ -97,8 +97,6 @@ class _ListProxy(object):
 
     """
     # XXX move this class down to C++
-    __slots__ = ('_owner', '_member', '_data')
-
     def __init__(self, owner, member, data):
         self._owner = owner
         self._member = member
@@ -146,6 +144,6 @@ class _ListProxy(object):
     def reverse(self):
         self._data.reverse()
 
-    def sort(self):
-        self._data.sort()
+    def sort(self, *args, **kwargs):
+        self._data.sort(*args, **kwargs)
 

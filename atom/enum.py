@@ -22,8 +22,8 @@ class Enum(Member):
         """
         if len(items) == 0:
             raise ValueError('an Enum requires at least 1 item')
-        self.default_kind = (DEFAULT_VALUE, items[0])
-        self.validate_kind = (VALIDATE_ENUM, items)
+        self.set_default_kind(DEFAULT_VALUE, items[0])
+        self.set_validate_kind(VALIDATE_ENUM, items)
 
     @property
     def items(self):
@@ -50,7 +50,7 @@ class Enum(Member):
         olditems = self.items
         newitems = olditems + items
         clone = self.clone()
-        clone.validate_kind = (VALIDATE_ENUM, newitems)
+        clone.set_validate_kind(VALIDATE_ENUM, newitems)
         return clone
 
     def restrict(self, *items):
@@ -73,8 +73,8 @@ class Enum(Member):
         if len(newitems) == 0:
             raise ValueError('an Enum requires at least 1 item')
         clone = self.clone()
-        clone.default_kind = (DEFAULT_VALUE, newitems[0])
-        clone.validate_kind = (VALIDATE_ENUM, newitems)
+        clone.set_default_kind(DEFAULT_VALUE, newitems[0])
+        clone.set_validate_kind(VALIDATE_ENUM, newitems)
         return clone
 
     def __call__(self, item):
@@ -91,6 +91,6 @@ class Enum(Member):
         if item not in olditems:
             raise TypeError('invalid enum value')
         clone = self.clone()
-        clone.default_kind = (DEFAULT_VALUE, item)
+        clone.set_default_kind(DEFAULT_VALUE, item)
         return clone
 

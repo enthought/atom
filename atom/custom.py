@@ -17,8 +17,8 @@ class CustomMember(Member):
     __slots__ = ()
 
     def __init__(self):
-        self.default_kind = (USER_DEFAULT, None)
-        self.validate_kind = (USER_VALIDATE, None)
+        self.set_default_kind(USER_DEFAULT, None)
+        self.set_validate_kind(USER_VALIDATE, None)
 
     def default(self, owner):
         """ Reimplement in a subclass to compute the default value.

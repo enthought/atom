@@ -5,7 +5,9 @@
 from .catom import (
     Member, DEFAULT_FACTORY, DEFAULT_VALUE, VALIDATE_READ_ONLY,
     VALIDATE_CONSTANT, VALIDATE_CALLABLE, VALIDATE_BOOL, VALIDATE_INT,
-    VALIDATE_LONG, VALIDATE_FLOAT, VALIDATE_STR, VALIDATE_UNICODE_PROMOTE
+    VALIDATE_LONG, VALIDATE_FLOAT, VALIDATE_FLOAT_PROMOTE, VALIDATE_STR,
+    VALIDATE_UNICODE, VALIDATE_UNICODE_PROMOTE, VALIDATE_LONG_PROMOTE,
+    VALIDATE_RANGE,
 )
 
 
@@ -37,10 +39,9 @@ class Value(Member):
 
         """
         if factory is not None:
-            kind = (DEFAULT_FACTORY, factory)
+            self.set_default_kind(DEFAULT_FACTORY, factory)
         else:
-            kind = (DEFAULT_VALUE, default)
-        self.default_kind = kind
+            self.set_default_kind(DEFAULT_VALUE, default)
 
 
 class ReadOnly(Value):
@@ -51,7 +52,7 @@ class ReadOnly(Value):
 
     def __init__(self, default=None, factory=None):
         super(ReadOnly, self).__init__(default, factory)
-        self.validate_kind = (VALIDATE_READ_ONLY, None)
+        self.set_validate_kind(VALIDATE_READ_ONLY, None)
 
 
 class Constant(Value):
@@ -62,7 +63,7 @@ class Constant(Value):
 
     def __init__(self, default=None, factory=None):
         super(Constant, self).__init__(default, factory)
-        self.validate_kind = (VALIDATE_CONSTANT, None)
+        self.set_validate_kind(VALIDATE_CONSTANT, None)
 
 
 class Callable(Value):
@@ -73,7 +74,7 @@ class Callable(Value):
 
     def __init__(self, default=None, factory=None):
         super(Callable, self).__init__(default, factory)
-        self.validate_kind = (VALIDATE_CALLABLE, None)
+        self.set_validate_kind(VALIDATE_CALLABLE, None)
 
 
 class Bool(Value):
@@ -84,7 +85,7 @@ class Bool(Value):
 
     def __init__(self, default=False, factory=None):
         super(Bool, self).__init__(default, factory)
-        self.validate_kind = (VALIDATE_BOOL, None)
+        self.set_validate_kind(VALIDATE_BOOL, None)
 
 
 class Int(Value):
@@ -95,29 +96,61 @@ class Int(Value):
 
     def __init__(self, default=0, factory=None):
         super(Int, self).__init__(default, factory)
-        self.validate_kind = (VALIDATE_INT, None)
+        self.set_validate_kind(VALIDATE_INT, None)
 
 
 class Long(Value):
     """ A value of type `long`.
 
+    By default, ints are promoted to longs. Pass strict=True to the
+    constructor to enable strict long checking.
+
     """
     __slots__ = ()
 
-    def __init__(self, default=0L, factory=None):
+    def __init__(self, default=0L, factory=None, strict=False):
         super(Long, self).__init__(default, factory)
-        self.validate_kind = (VALIDATE_LONG, None)
+        if strict:
+            self.set_validate_kind(VALIDATE_LONG, None)
+        else:
+            self.set_validate_kind(VALIDATE_LONG_PROMOTE, None)
+
+
+class Range(Value):
+    """ An integer value clipped to a range.
+
+    """
+    __slots__ = ()
+
+    def __init__(self, low=None, high=None, value=None):
+        if low is not None and high is not None and low > high:
+            low, high = high, low
+        default = 0
+        if value is not None:
+            default = value
+        elif low is not None:
+            default = low
+        elif high is not None:
+            default = high
+        self.set_default_kind(DEFAULT_VALUE, default)
+        self.set_validate_kind(VALIDATE_RANGE, (low, high))
 
 
 class Float(Value):
     """ A value of type `float`.
 
+    By default, ints and longs will be promoted to floats. Pass
+    strict=True to the constructor to enable strict float checking.
+
     """
     __slots__ = ()
 
-    def __init__(self, default=0.0, factory=None):
+    def __init__(self, default=0.0, factory=None, strict=False):
         super(Float, self).__init__(default, factory)
-        self.validate_kind = (VALIDATE_FLOAT, None)
+        if strict:
+            self.set_validate_kind(VALIDATE_FLOAT, None)
+        else:
+            self.set_validate_kind(VALIDATE_FLOAT_PROMOTE, None)
 
 
 class Str(Value):
@@ -128,16 +161,22 @@ class Str(Value):
 
     def __init__(self, default='', factory=None):
         super(Str, self).__init__(default, factory)
-        self.validate_kind = (VALIDATE_STR, None)
+        self.set_validate_kind(VALIDATE_STR, None)
 
 
 class Unicode(Value):
     """ A value of type `unicode`.
 
+    By default, plain strings will be promoted to unicode strings. Pass
+    strict=True to the constructor to enable strict unicode checking.
+
     """
     __slots__ = ()
 
-    def __init__(self, default=u'', factory=None):
+    def __init__(self, default=u'', factory=None, strict=False):
         super(Unicode, self).__init__(default, factory)
-        self.validate_kind = (VALIDATE_UNICODE_PROMOTE, None)
+        if strict:
+            self.set_validate_kind(VALIDATE_UNICODE, None)
+        else:
+            self.set_validate_kind(VALIDATE_UNICODE_PROMOTE, None)
 

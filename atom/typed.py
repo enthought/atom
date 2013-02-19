@@ -46,13 +46,13 @@ class Typed(Member):
 
         """
         if factory is not None:
-            self.default_kind = (DEFAULT_FACTORY, factory)
+            self.set_default_kind(DEFAULT_FACTORY, factory)
         elif args is not None or kwargs is not None:
             args = args or ()
             kwargs = kwargs or {}
             factory = lambda: kind(*args, **kwargs)
-            self.default_kind = (DEFAULT_FACTORY, factory)
-        self.validate_kind = (VALIDATE_TYPED, kind)
+            self.set_default_kind(DEFAULT_FACTORY, factory)
+        self.set_validate_kind(VALIDATE_TYPED, kind)
 
 
 class ForwardTyped(Typed):
@@ -89,12 +89,12 @@ class ForwardTyped(Typed):
 
         """
         if factory is not None:
-            self.default_kind = (DEFAULT_FACTORY, factory)
+            self.set_default_kind(DEFAULT_FACTORY, factory)
         elif args is not None or kwargs is not None:
             args = args or ()
             kwargs = kwargs or {}
-            self.default_kind = (USER_DEFAULT, (args, kwargs))
-        self.validate_kind = (USER_VALIDATE, resolve)
+            self.set_default_kind(USER_DEFAULT, (args, kwargs))
+        self.set_validate_kind(USER_VALIDATE, resolve)
 
     def default(self, owner, name):
         """ Called to retrieve the default value.
@@ -108,8 +108,8 @@ class ForwardTyped(Typed):
         kind = resolve()
         args, kwargs = self.default_kind[1]
         value = kind(*args, **kwargs)
-        self.default_kind = (DEFAULT_FACTORY, lambda: kind(*args, **kwargs))
-        self.validate_kind = (VALIDATE_TYPED, kind)
+        self.set_default_kind(DEFAULT_FACTORY, lambda: kind(*args, **kwargs))
+        self.set_validate_kind(VALIDATE_TYPED, kind)
         return value
 
     def validate(self, owner, name, old, new):
@@ -124,10 +124,10 @@ class ForwardTyped(Typed):
         kind = resolve()
         if type(new) not in kind.mro():
             raise TypeError('invalid type')
-        self.validate_kind = (VALIDATE_TYPED, kind)
+        self.set_validate_kind(VALIDATE_TYPED, kind)
         if self.default_kind[0] == USER_DEFAULT:
             args, kwargs = self.default_kind[1]
             factory = lambda: kind(*args, **kwargs)
-            self.default_kind = (DEFAULT_FACTORY, factory)
+            self.set_default_kind(DEFAULT_FACTORY, factory)
         return new
 

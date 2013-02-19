@@ -31,10 +31,10 @@ class Coerced(Member):
 
         """
         if factory is not None:
-            self.default_kind = (DEFAULT_FACTORY, factory)
+            self.set_default_kind(DEFAULT_FACTORY, factory)
         else:
-            self.default_kind = (DEFAULT_VALUE, None)
-        self.validate_kind = (USER_VALIDATE, (kind, coercer))
+            self.set_default_kind(DEFAULT_VALUE, None)
+        self.set_validate_kind(USER_VALIDATE, (kind, coercer))
 
     def validate(self, owner, name, old, new):
         """ Validate the value of the member.
