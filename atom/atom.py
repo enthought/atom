@@ -6,7 +6,10 @@ from contextlib import contextmanager
 import re
 from types import FunctionType
 
-from .catom import CAtom, Member, DEFAULT_OWNER_METHOD, VALIDATE_OWNER_METHOD
+from .catom import (
+    CAtom, Member, DEFAULT_OWNER_METHOD, VALIDATE_OWNER_METHOD,
+    POST_VALIDATE_OWNER_METHOD,
+)
 
 
 class observe(object):
@@ -74,6 +77,7 @@ class AtomMeta(type):
         defaults = []
         validates = []
         decorated = []
+        post_validates = []
         dec_seen = set()
         for key, value in dct.iteritems():
             if isinstance(value, observe):
@@ -91,6 +95,8 @@ class AtomMeta(type):
                 defaults.append(key)
             elif key.startswith('_validate_') and isinstance(value, FunctionType):
                 validates.append(key)
+            elif key.startswith('_post_validate_') and isinstance(value, FunctionType):
+                post_validates.append(key)
 
         # Create the class object.
         cls = type.__new__(meta, name, bases, dct)
@@ -123,7 +129,7 @@ class AtomMeta(type):
         resolved_index = len(occupied)
         for member in conflicts:
             clone = member.clone()
-            clone._set_member_index(resolved_index)
+            clone.set_member_index(resolved_index)
             owned_members.add(clone)
             members[clone.name] = clone
             setattr(cls, clone.name, clone)
@@ -138,14 +144,14 @@ class AtomMeta(type):
                 if value in owned_members:
                     raise TypeError('cannot bind member to multiple names')
                 owned_members.add(value)
-                value._set_member_name(key)
+                value.set_member_name(key)
                 if key in members:
                     supermember = members[key]
                     members[key] = value
-                    value._set_member_index(supermember.index)
+                    value.set_member_index(supermember.index)
                     value.copy_static_observers(supermember)
                 else:
-                    value._set_member_index(len(members))
+                    value.set_member_index(len(members))
                     members[key] = value
 
         # Add the special statically defined behaviors for the members.
@@ -162,7 +168,7 @@ class AtomMeta(type):
                     members[target] = member
                     owned_members.add(member)
                     setattr(cls, target, member)
-                member.default_kind = (DEFAULT_OWNER_METHOD, mangled_name)
+                member.set_default_kind(DEFAULT_OWNER_METHOD, mangled_name)
 
         # Validate methods
         for mangled_name in validates:
@@ -174,7 +180,19 @@ class AtomMeta(type):
                     members[target] = member
                     owned_members.add(member)
                     setattr(cls, target, member)
-                member.validate_kind = (VALIDATE_OWNER_METHOD, mangled_name)
+                member.set_validate_kind(VALIDATE_OWNER_METHOD, mangled_name)
+
+        # Post validate methods
+        for mangled_name in post_validates:
+            target = mangled_name[15:]
+            if target in members:
+                member = members[target]
+                if member not in owned_members:
+                    member = member.clone()
+                    members[target] = member
+                    owned_members.add(member)
+                    setattr(cls, target, member)
+                member.set_post_validate_kind(POST_VALIDATE_OWNER_METHOD, mangled_name)
 
         # Static observers
         for mangled_name in statics:
