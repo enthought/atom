@@ -61,6 +61,12 @@ enum DefaultKind
 };
 
 
+enum MemberFlag
+{
+    MemberValidateDefault = 0x1,
+};
+
+
 typedef struct {
     PyObject_HEAD
 } PyNull;
@@ -81,6 +87,7 @@ class StaticModifyGuard;
 typedef struct {
     PyObject_HEAD
     uint32_t index;
+    uint32_t flags;
     PyObject* name;
     DefaultKind default_kind;
     ValidateKind validate_kind;

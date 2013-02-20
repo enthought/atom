@@ -75,6 +75,7 @@ class Callable(Value):
     def __init__(self, default=None, factory=None):
         super(Callable, self).__init__(default, factory)
         self.set_validate_kind(VALIDATE_CALLABLE, None)
+        self.set_validate_default(True)
 
 
 class Bool(Value):
@@ -86,6 +87,7 @@ class Bool(Value):
     def __init__(self, default=False, factory=None):
         super(Bool, self).__init__(default, factory)
         self.set_validate_kind(VALIDATE_BOOL, None)
+        self.set_validate_default(True)
 
 
 class Int(Value):
@@ -97,6 +99,7 @@ class Int(Value):
     def __init__(self, default=0, factory=None):
         super(Int, self).__init__(default, factory)
         self.set_validate_kind(VALIDATE_INT, None)
+        self.set_validate_default(True)
 
 
 class Long(Value):
@@ -114,6 +117,7 @@ class Long(Value):
             self.set_validate_kind(VALIDATE_LONG, None)
         else:
             self.set_validate_kind(VALIDATE_LONG_PROMOTE, None)
+        self.set_validate_default(True)
 
 
 class Range(Value):
@@ -134,6 +138,7 @@ class Range(Value):
             default = high
         self.set_default_kind(DEFAULT_VALUE, default)
         self.set_validate_kind(VALIDATE_RANGE, (low, high))
+        self.set_validate_default(True)
 
 
 class Float(Value):
@@ -151,6 +156,7 @@ class Float(Value):
             self.set_validate_kind(VALIDATE_FLOAT, None)
         else:
             self.set_validate_kind(VALIDATE_FLOAT_PROMOTE, None)
+        self.set_validate_default(True)
 
 
 class Str(Value):
@@ -162,6 +168,7 @@ class Str(Value):
     def __init__(self, default='', factory=None):
         super(Str, self).__init__(default, factory)
         self.set_validate_kind(VALIDATE_STR, None)
+        self.set_validate_default(True)
 
 
 class Unicode(Value):
@@ -179,4 +186,5 @@ class Unicode(Value):
             self.set_validate_kind(VALIDATE_UNICODE, None)
         else:
             self.set_validate_kind(VALIDATE_UNICODE_PROMOTE, None)
+        self.set_validate_default(True)
 

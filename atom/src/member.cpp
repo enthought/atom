@@ -580,6 +580,10 @@ Member__get__( PyObject* self, PyObject* owner, PyObject* type )
         value = member_default( member, owner );       // value is 0 before assignment
         if( !value )
             return 0;
+        if( ( member->flags & MemberValidateDefault ) && member->validate_kind )
+            value = member_validate( member, owner, _py_null, value.get() );
+        if( !value )
+            return 0;
         if( value != _py_null )
             atom->data[ member->index ] = value.newref();  // take owned internal ref
         return value.release();                            // return owned ref to caller
@@ -859,6 +863,42 @@ Member_set_post_validate_kind( Member* self, PyObject* args )
 }
 
 
+static PyObject*
+get_member_flag( Member* self, MemberFlag which )
+{
+    if( self->flags & which )
+        Py_RETURN_TRUE;
+    Py_RETURN_FALSE;
+}
+
+
+static void
+set_member_flag( Member* self, MemberFlag which, bool enable )
+{
+    if( enable )
+        self->flags |= which;
+    else
+        self->flags &= ~which;
+}
+
+
+static PyObject*
+Member_get_validate_default( Member* self, void* ctxt )
+{
+    return get_member_flag( self, MemberValidateDefault );
+}
+
+
+static PyObject*
+Member_set_validate_default( Member* self, PyObject* arg )
+{
+    if( !PyBool_Check( arg ) )
+        return py_expected_type_fail( arg, "bool" );
+    set_member_flag( self, MemberValidateDefault, arg == Py_True ? true : false );
+    Py_RETURN_NONE;
+}
+
+
 static PyGetSetDef
 Member_getset[] = {
     { "name", ( getter )Member_get_name, 0,
@@ -871,6 +911,8 @@ Member_getset[] = {
       "Get the validate kind for the member." },
     { "post_validate_kind", ( getter )Member_get_post_validate_kind, 0,
       "Get the post validate kind for the member." },
+    { "validate_default", ( getter )Member_get_validate_default, 0,
+      "Whether or not the default value will be validated by the member" },
     { 0 } // sentinel
 };
 
@@ -911,6 +953,8 @@ Member_methods[] = {
       "Set the name to which the member is bound. Use with extreme caution!" },
     { "set_member_index", ( PyCFunction )Member_set_member_index, METH_O,
       "Set the index to which the member is bound. Use with extreme caution!" },
+    { "set_validate_default", ( PyCFunction )Member_set_validate_default, METH_O,
+      "Set whether or not to validate the default value." },
     { 0 } // sentinel
 };
 
